@@ -1192,7 +1192,7 @@ export default function App() {
                           )}
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          {isAdminAuth && (
+                          {isAdminAuth ? (
                             <>
                               <button
                                 onClick={() => {
@@ -1217,16 +1217,17 @@ export default function App() {
                                 <Trash2 size={16} />
                               </button>
                             </>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setFormData(prev => ({ ...prev, massageType: m.name }));
+                                setShowServices(false);
+                              }}
+                              className="px-6 py-3 rounded-xl bg-spa-gold text-spa-base text-[10px] font-bold uppercase tracking-widest hover:bg-spa-accent hover:text-spa-base transition-all"
+                            >
+                              Reservar
+                            </button>
                           )}
-                          <button
-                            onClick={() => {
-                              setFormData(prev => ({ ...prev, massageType: m.name }));
-                              setShowServices(false);
-                            }}
-                            className="px-6 py-3 rounded-xl bg-spa-gold text-spa-base text-[10px] font-bold uppercase tracking-widest hover:bg-spa-accent hover:text-spa-base transition-all"
-                          >
-                            Reservar
-                          </button>
                         </div>
                       </div>
                     ))

@@ -63,6 +63,7 @@ export default function App() {
     description: "",
   });
   const [infoModalMassage, setInfoModalMassage] = useState<{ name: string; description: string } | null>(null);
+  const [editMassageId, setEditMassageId] = useState<string | null>(null);
   
   // Parallax Effect
   const heroRef = useRef(null);
@@ -170,9 +171,15 @@ export default function App() {
       return;
     }
 
-    await handleUpdateConfig({
-      ...config,
-      massageTypes: [
+    let updatedTypes;
+    if (editMassageId) {
+      updatedTypes = config.massageTypes.map((m) =>
+        m.id === editMassageId
+          ? { ...m, name: newMassage.name.trim(), price: newMassage.price.trim(), duration: newMassage.duration.trim(), description: newMassage.description.trim() }
+          : m
+      );
+    } else {
+      updatedTypes = [
         ...config.massageTypes,
         {
           id: Date.now().toString(),
@@ -181,15 +188,12 @@ export default function App() {
           duration: newMassage.duration.trim(),
           description: newMassage.description.trim(),
         },
-      ],
-    });
+      ];
+    }
 
-    setNewMassage({
-      name: "",
-      price: "",
-      duration: "",
-      description: "",
-    });
+    await handleUpdateConfig({ ...config, massageTypes: updatedTypes });
+    setEditMassageId(null);
+    setNewMassage({ name: "", price: "", duration: "", description: "" });
   };
 
   const handleBotVerify = async (val: string) => {
@@ -808,17 +812,28 @@ export default function App() {
                               <p className="text-[10px] text-[#A0A3A1] mt-1 line-clamp-2">{m.description}</p>
                             )}
                           </div>
-                          <button
-                            onClick={() =>
-                              handleUpdateConfig({
-                                ...config,
-                                massageTypes: config.massageTypes.filter((x) => x.id !== m.id),
-                              })
-                            }
-                            className="p-2 text-[#7A7D7B] hover:text-rose-500 transition-colors"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => {
+                                setEditMassageId(m.id);
+                                setNewMassage({ name: m.name, price: m.price, duration: m.duration, description: m.description || "" });
+                              }}
+                              className="p-2 text-[#7A7D7B] hover:text-spa-gold transition-colors"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                            </button>
+                            <button
+                              onClick={() =>
+                                handleUpdateConfig({
+                                  ...config,
+                                  massageTypes: config.massageTypes.filter((x) => x.id !== m.id),
+                                })
+                              }
+                              className="p-2 text-[#7A7D7B] hover:text-rose-500 transition-colors"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -859,13 +874,23 @@ export default function App() {
                       />
                     </div>
 
-                    <button
-                      onClick={handleAddMassageType}
-                      className="w-full py-4 border-2 border-dashed border-spa-accent/30 rounded-xl text-spa-gold text-[10px] font-bold uppercase tracking-widest hover:bg-spa-accent/10 transition-all flex items-center justify-center gap-2"
-                    >
-                      <Plus size={16} />
-                      Añadir Tipo de Masaje
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleAddMassageType}
+                        className="flex-1 py-4 border-2 border-dashed border-spa-accent/30 rounded-xl text-spa-gold text-[10px] font-bold uppercase tracking-widest hover:bg-spa-accent/10 transition-all flex items-center justify-center gap-2"
+                      >
+                        {editMassageId ? <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg> : <Plus size={16} />}
+                        {editMassageId ? "Guardar Cambios" : "Añadir Tipo de Masaje"}
+                      </button>
+                      {editMassageId && (
+                        <button
+                          onClick={() => { setEditMassageId(null); setNewMassage({ name: "", price: "", duration: "", description: "" }); }}
+                          className="px-6 py-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-[10px] font-bold uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all"
+                        >
+                          Cancelar
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Estudio */}
@@ -1170,18 +1195,30 @@ export default function App() {
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           {isAdminAuth && (
-                            <button
-                              onClick={() =>
-                                handleUpdateConfig({
-                                  ...config,
-                                  massageTypes: config.massageTypes.filter((x) => x.id !== m.id),
-                                })
-                              }
-                              className="p-2 text-[#7A7D7B] hover:text-rose-500 transition-colors"
-                              title="Eliminar servicio"
-                            >
-                              <Trash2 size={16} />
-                            </button>
+                            <>
+                              <button
+                                onClick={() => {
+                                  setEditMassageId(m.id);
+                                  setNewMassage({ name: m.name, price: m.price, duration: m.duration, description: m.description || "" });
+                                }}
+                                className="p-2 text-[#7A7D7B] hover:text-spa-gold transition-colors"
+                                title="Editar servicio"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                              </button>
+                              <button
+                                onClick={() =>
+                                  handleUpdateConfig({
+                                    ...config,
+                                    massageTypes: config.massageTypes.filter((x) => x.id !== m.id),
+                                  })
+                                }
+                                className="p-2 text-[#7A7D7B] hover:text-rose-500 transition-colors"
+                                title="Eliminar servicio"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </>
                           )}
                           <button
                             onClick={() => {
@@ -1199,33 +1236,52 @@ export default function App() {
 
                   {isAdminAuth && (
                     <div className="pt-6 space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <input
-                          value={newMassage.name}
-                          onChange={(e) => setNewMassage((prev) => ({ ...prev, name: e.target.value }))}
-                          placeholder="Nombre"
-                          className="h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm md:col-span-3"
+                      <div className="grid grid-cols-1 gap-3">
+                        <textarea
+                          value={newMassage.description}
+                          onChange={(e) => setNewMassage((prev) => ({ ...prev, description: e.target.value }))}
+                          placeholder="Descripción del servicio"
+                          rows={3}
+                          className="h-24 bg-spa-elevated border border-white/5 rounded-xl px-4 py-3 outline-none focus:border-spa-gold text-sm resize-none"
                         />
-                        <input
-                          value={newMassage.price}
-                          onChange={(e) => setNewMassage((prev) => ({ ...prev, price: e.target.value }))}
-                          placeholder="Precio"
-                          className="h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm"
-                        />
-                        <input
-                          value={newMassage.duration}
-                          onChange={(e) => setNewMassage((prev) => ({ ...prev, duration: e.target.value }))}
-                          placeholder="Duración"
-                          className="h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm md:col-span-2"
-                        />
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <input
+                            value={newMassage.name}
+                            onChange={(e) => setNewMassage((prev) => ({ ...prev, name: e.target.value }))}
+                            placeholder="Nombre"
+                            className="h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm"
+                          />
+                          <input
+                            value={newMassage.price}
+                            onChange={(e) => setNewMassage((prev) => ({ ...prev, price: e.target.value }))}
+                            placeholder="Precio"
+                            className="h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm"
+                          />
+                          <input
+                            value={newMassage.duration}
+                            onChange={(e) => setNewMassage((prev) => ({ ...prev, duration: e.target.value }))}
+                            placeholder="Duración"
+                            className="h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm"
+                          />
+                        </div>
                       </div>
-                      <button
-                        onClick={handleAddMassageType}
-                        className="w-full py-4 border-2 border-dashed border-spa-accent/30 rounded-xl text-spa-gold text-[10px] font-bold uppercase tracking-widest hover:bg-spa-accent/10 transition-all flex items-center justify-center gap-2"
-                      >
-                        <Plus size={16} />
-                        Añadir Servicio
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleAddMassageType}
+                          className="flex-1 py-4 border-2 border-dashed border-spa-accent/30 rounded-xl text-spa-gold text-[10px] font-bold uppercase tracking-widest hover:bg-spa-accent/10 transition-all flex items-center justify-center gap-2"
+                        >
+                          {editMassageId ? <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg> : <Plus size={16} />}
+                          {editMassageId ? "Guardar Cambios" : "Añadir Servicio"}
+                        </button>
+                        {editMassageId && (
+                          <button
+                            onClick={() => { setEditMassageId(null); setNewMassage({ name: "", price: "", duration: "", description: "" }); }}
+                            className="px-6 py-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-[10px] font-bold uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all"
+                          >
+                            Cancelar
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>

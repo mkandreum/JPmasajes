@@ -26,6 +26,7 @@ interface AppConfig {
   bannerUrl: string;
   morningHours: string[];
   afternoonHours: string[];
+  address: string;
   massageTypes: { id: string; name: string; price: string; duration: string; description: string }[];
 }
 
@@ -37,7 +38,8 @@ export default function App() {
     bannerUrl: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80",
     morningHours: [],
     afternoonHours: [],
-    massageTypes: []
+    massageTypes: [],
+    address: ""
   });
   
   const [selectedDate, setSelectedDate] = useState<Date>(startOfToday());
@@ -903,6 +905,24 @@ export default function App() {
                         }}
                       />
                     </label>
+
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-bold text-spa-gold uppercase tracking-widest px-1">Dirección del Estudio</label>
+                      <div className="flex gap-2">
+                        <input
+                          value={config.address}
+                          onChange={(e) => setConfig(prev => ({ ...prev, address: e.target.value }))}
+                          placeholder="Calle, número, ciudad..."
+                          className="flex-1 h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm"
+                        />
+                        <button
+                          onClick={() => handleUpdateConfig({ ...config, address: config.address })}
+                          className="px-5 h-11 rounded-xl bg-spa-gold text-spa-base text-[10px] font-bold uppercase tracking-widest hover:bg-spa-accent transition-all shrink-0"
+                        >
+                          OK
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Próximas Citas */}

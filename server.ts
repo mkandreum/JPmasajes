@@ -47,15 +47,16 @@ db.exec(`
 // Initialize default config if empty
 const configCount = db.prepare("SELECT COUNT(*) as count FROM config").get() as { count: number };
 if (configCount.count === 0) {
-  db.prepare("INSERT INTO config (id, bannerUrl, morningHours, afternoonHours, massageTypes) VALUES (?, ?, ?, ?, ?)")
+  db.prepare("INSERT INTO config (id, bannerUrl, morningHours, afternoonHours, massageTypes, address) VALUES (?, ?, ?, ?, ?, ?)")
     .run(1, "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80", 
       JSON.stringify(["09:00", "10:00", "11:00", "12:00", "13:00"]), 
       JSON.stringify(["15:00", "16:00", "17:00", "18:00", "19:00", "20:00"]),
       JSON.stringify([
-        { id: "1", name: "Masaje Terapéutico", price: "50€", duration: "60 min" },
-        { id: "2", name: "Masaje Relajante", price: "45€", duration: "60 min" },
-        { id: "3", name: "Masaje Deportivo", price: "60€", duration: "60 min" }
-      ])
+        { id: "1", name: "Masaje Terapéutico", price: "50€", duration: "60 min", description: "" },
+        { id: "2", name: "Masaje Relajante", price: "45€", duration: "60 min", description: "" },
+        { id: "3", name: "Masaje Deportivo", price: "60€", duration: "60 min", description: "" }
+      ]),
+      ""
     );
 } else {
   // Migration: Add massageTypes column if it doesn't exist
@@ -75,6 +76,16 @@ try {
   db.exec("ALTER TABLE appointments ADD COLUMN price TEXT");
   db.exec("ALTER TABLE appointments ADD COLUMN duration TEXT");
 } catch (e) { /* columns may already exist */ }
+
+// Migration: Add address column to config if it doesn't exist
+try {
+  db.exec("ALTER TABLE config ADD COLUMN address TEXT");
+} catch (e) { /* column may already exist */ }
+
+// Migration: Add addressSent column to appointments if it doesn't exist
+try {
+  db.exec("ALTER TABLE appointments ADD COLUMN addressSent INTEGER DEFAULT 0");
+} catch (e) { /* column may already exist */ }
 
 interface Appointment {
   id: string;
@@ -127,7 +138,8 @@ async function startServer() {
       bannerUrl: row.bannerUrl,
       morningHours: JSON.parse(row.morningHours),
       afternoonHours: JSON.parse(row.afternoonHours),
-      massageTypes: row.massageTypes ? JSON.parse(row.massageTypes) : []
+      massageTypes: row.massageTypes ? JSON.parse(row.massageTypes) : [],
+      address: row.address || ""
     };
   };
 
@@ -255,15 +267,16 @@ async function startServer() {
   });
 
   app.put("/api/app-config", (req, res) => {
-    const { bannerUrl, morningHours, afternoonHours, massageTypes } = req.body;
+    const { bannerUrl, morningHours, afternoonHours, massageTypes, address } = req.body;
     const current = getConfig();
     
-    db.prepare("UPDATE config SET bannerUrl = ?, morningHours = ?, afternoonHours = ?, massageTypes = ? WHERE id = 1")
+    db.prepare("UPDATE config SET bannerUrl = ?, morningHours = ?, afternoonHours = ?, massageTypes = ?, address = ? WHERE id = 1")
       .run(
         bannerUrl || current.bannerUrl,
         morningHours ? JSON.stringify(morningHours) : JSON.stringify(current.morningHours),
         afternoonHours ? JSON.stringify(afternoonHours) : JSON.stringify(current.afternoonHours),
-        massageTypes ? JSON.stringify(massageTypes) : JSON.stringify(current.massageTypes)
+        massageTypes ? JSON.stringify(massageTypes) : JSON.stringify(current.massageTypes),
+        address !== undefined ? address : (current.address || "")
       );
     
     res.json(getConfig());
@@ -368,9 +381,13 @@ async function startServer() {
       });
       
       // Email to client
+      const clientConfig = getConfig();
+      const addressNotice = clientConfig.address 
+        ? `<p style="font-size:13px;color:#8F7256;background:rgba(143,114,86,0.1);padding:12px 16px;border-radius:10px;margin-top:16px;">📬 Recibirás un correo con la dirección del estudio <strong>2 horas antes</strong> de tu cita.</p>`
+        : "";
       const clientHtml = getHtmlTemplate(
         "Cita Confirmada", 
-        "<p>Tu sesión de masaje ha sido reservada con éxito. Estamos deseando recibirte para brindarte la mejor experiencia de relajación.</p>",
+        `<p>Tu sesión de masaje ha sido reservada con éxito. Estamos deseando recibirte para brindarte la mejor experiencia de relajación.</p>${addressNotice}`,
         clientName,
         dateStr,
         id,
@@ -695,6 +712,91 @@ db.prepare("INSERT INTO appointments (id, clientName, clientEmail, clientPhone, 
      }
   });
 
+
+  // Scheduler: send address email 2 hours before each appointment
+  const checkAndSendAddressEmails = async () => {
+    const cfg = getConfig();
+    if (!cfg.address || !getAdminTokens()) return;
+
+    const now = new Date();
+    const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+    const tolerance = 5 * 60 * 1000; // 5 minutes tolerance
+    const lowerBound = new Date(twoHoursLater.getTime() - tolerance).toISOString();
+    const upperBound = new Date(twoHoursLater.getTime() + tolerance).toISOString();
+
+    const rows = db.prepare(
+      "SELECT * FROM appointments WHERE startTime BETWEEN ? AND ? AND status = 'confirmed' AND (addressSent IS NULL OR addressSent = 0)"
+    ).all(lowerBound, upperBound) as any[];
+
+    for (const appt of rows) {
+      try {
+        const dateStr = new Date(appt.startTime).toLocaleString('es-ES', {
+          weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid'
+        });
+        const addressHtml = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#0E1410;font-family:Georgia,serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0E1410;padding:20px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#141A16;border:1px solid rgba(143,114,86,0.25);border-radius:16px;overflow:hidden;">
+        <tr>
+          <td style="background:#1a2018;padding:30px 40px;border-bottom:1px solid rgba(143,114,86,0.2);">
+            <p style="margin:0;font-family:Georgia,serif;font-size:28px;color:#F9F8F6;letter-spacing:1px;">Jean Pierre</p>
+            <p style="margin:4px 0 0;font-size:11px;color:#8F7256;letter-spacing:3px;text-transform:uppercase;">Massage Studio</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:35px 40px;">
+            <h1 style="margin:0 0 20px;font-family:Georgia,serif;font-size:28px;color:#F9F8F6;font-weight:normal;">Tu cita está cerca</h1>
+            <p style="margin:0 0 20px;font-size:15px;color:#A0A3A1;line-height:1.6;">Hola <strong style="color:#F9F8F6;">${appt.clientName}</strong>,</p>
+            <p style="font-size:15px;color:#A0A3A1;line-height:1.6;">Tu cita de masaje es en aproximadamente <strong style="color:#F9F8F6;">2 horas</strong>. Aquí tienes la dirección del estudio:</p>
+            <div style="background:#1E2520;border:1px solid rgba(143,114,86,0.15);border-radius:12px;padding:24px;margin:25px 0;text-align:center;">
+              <p style="margin:0;font-size:16px;color:#F9F8F6;font-weight:500;line-height:1.6;">${cfg.address}</p>
+            </div>
+            <p style="font-size:14px;color:#A0A3A1;line-height:1.6;">
+              <strong style="color:#F9F8F6;">${dateStr}</strong><br>
+              Servicio: ${appt.massageType || 'Masaje Terapéutico'}
+            </p>
+            <p style="font-size:14px;color:#A0A3A1;line-height:1.6;margin-top:20px;">Por favor, llega 5-10 minutos antes para disfrutar de una experiencia completa.</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:20px 40px;border-top:1px solid rgba(255,255,255,0.06);background:#0E1410;text-align:center;">
+            <p style="margin:0;font-size:11px;color:#5A5D5B;">© 2026 Jean Pierre Massage Studio. Todos los derechos reservados.</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+        oauth2Client.setCredentials(getAdminTokens());
+        const fromEmail = getAdminEmail() || "me";
+        const subject = "📍 Dirección del Estudio - Jean Pierre";
+        const encodedSubject = Buffer.from(subject, 'utf-8').toString('base64');
+        const message = [
+          `To: ${appt.clientEmail}`,
+          `From: "Jean Pierre Vegas" <${fromEmail}>`,
+          `Subject: =?utf-8?B?${encodedSubject}?=`,
+          `MIME-Version: 1.0`,
+          `Content-Type: text/html; charset=utf-8`,
+          `Content-Transfer-Encoding: 8bit`,
+          ``,
+          addressHtml
+        ].join('\r\n');
+        const encodedMessage = Buffer.from(message, "utf-8").toString("base64url");
+        await gmail.users.messages.send({ userId: "me", requestBody: { raw: encodedMessage } });
+        db.prepare("UPDATE appointments SET addressSent = 1 WHERE id = ?").run(appt.id);
+        console.log(`Address email sent for appointment ${appt.id}`);
+      } catch (e) {
+        console.error(`Failed to send address email for ${appt.id}:`, e);
+      }
+    }
+  };
+  setInterval(checkAndSendAddressEmails, 60 * 1000);
+  checkAndSendAddressEmails();
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

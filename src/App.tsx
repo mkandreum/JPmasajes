@@ -46,6 +46,7 @@ export default function App() {
   const [viewingAppt, setViewingAppt] = useState<Appointment | null>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showSideMenu, setShowSideMenu] = useState(false);
+  const [showServices, setShowServices] = useState(false);
   const [activeShift, setActiveShift] = useState<"morning" | "afternoon">("morning");
   const [formData, setFormData] = useState({ clientName: "", clientEmail: "", clientPhone: "", massageType: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1080,6 +1081,59 @@ export default function App() {
           )}
 
 
+          {/* Servicios */}
+          {showServices && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-[100] bg-spa-base/90 backdrop-blur-xl flex items-center justify-center p-6"
+            >
+              <div className="w-full max-w-2xl bg-spa-card rounded-[40px] border border-white/10 shadow-2xl max-h-[80vh] flex flex-col">
+                <div className="p-10 pb-6 border-b border-white/5 flex justify-between items-center">
+                  <h2 className="text-3xl font-serif">Servicios</h2>
+                  <button
+                    onClick={() => setShowServices(false)}
+                    className="p-3 bg-spa-elevated rounded-full hover:text-spa-gold"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-10 space-y-4 no-scrollbar">
+                  {config.massageTypes.length === 0 ? (
+                    <div className="bg-spa-elevated border border-white/5 rounded-2xl p-10 text-center">
+                      <p className="text-sm text-[#7A7D7B]">No hay servicios disponibles</p>
+                    </div>
+                  ) : (
+                    config.massageTypes.map((m) => (
+                      <div
+                        key={m.id}
+                        className="bg-spa-elevated rounded-2xl border border-white/5 p-6 flex items-center justify-between gap-6 hover:border-spa-gold/30 transition-all group"
+                      >
+                        <div className="flex-1">
+                          <h3 className="text-lg font-serif text-spa-crema">{m.name}</h3>
+                          <div className="flex items-center gap-4 mt-2">
+                            <span className="text-sm font-bold text-spa-gold">{m.price}</span>
+                            <span className="text-[10px] text-[#7A7D7B] uppercase tracking-widest">{m.duration}</span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, massageType: m.name }));
+                            setShowServices(false);
+                          }}
+                          className="px-6 py-3 rounded-xl bg-spa-gold text-spa-base text-[10px] font-bold uppercase tracking-widest hover:bg-spa-accent hover:text-spa-base transition-all shrink-0"
+                        >
+                          Reservar
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {/* Bot Interface */}
           {showBot && (
              <motion.div initial={{ opacity: 0, y: 20, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.95 }} className="fixed bottom-24 right-6 w-[calc(100vw-48px)] max-w-[350px] h-[500px] max-h-[70vh] bg-spa-card border border-white/10 rounded-[28px] shadow-2xl flex flex-col z-50 overflow-hidden glow-gold">
@@ -1245,6 +1299,10 @@ export default function App() {
                    <button onClick={() => { setShowSideMenu(false); setShowBot(true); }} className="w-full flex items-center gap-4 group">
                       <div className="w-12 h-12 rounded-2xl bg-spa-accent/10 flex items-center justify-center text-spa-gold group-hover:bg-spa-gold group-hover:text-spa-base transition-all"><CalendarIcon size={20}/></div>
                       <span className="font-medium">Gestionar Cita</span>
+                   </button>
+                   <button onClick={() => { setShowSideMenu(false); setShowServices(true); }} className="w-full flex items-center gap-4 group">
+                      <div className="w-12 h-12 rounded-2xl bg-spa-accent/10 flex items-center justify-center text-spa-gold group-hover:bg-spa-gold group-hover:text-spa-base transition-all"><Leaf size={20}/></div>
+                      <span className="font-medium">Servicios</span>
                    </button>
                    {isAdminAuth ? (
                      <button onClick={() => { setShowSideMenu(false); setShowAdminPanel(true); }} className="w-full flex items-center gap-4 group">

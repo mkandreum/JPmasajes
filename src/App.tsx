@@ -1117,17 +1117,65 @@ export default function App() {
                             <span className="text-[10px] text-[#7A7D7B] uppercase tracking-widest">{m.duration}</span>
                           </div>
                         </div>
-                        <button
-                          onClick={() => {
-                            setFormData(prev => ({ ...prev, massageType: m.name }));
-                            setShowServices(false);
-                          }}
-                          className="px-6 py-3 rounded-xl bg-spa-gold text-spa-base text-[10px] font-bold uppercase tracking-widest hover:bg-spa-accent hover:text-spa-base transition-all shrink-0"
-                        >
-                          Reservar
-                        </button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {isAdminAuth && (
+                            <button
+                              onClick={() =>
+                                handleUpdateConfig({
+                                  ...config,
+                                  massageTypes: config.massageTypes.filter((x) => x.id !== m.id),
+                                })
+                              }
+                              className="p-2 text-[#7A7D7B] hover:text-rose-500 transition-colors"
+                              title="Eliminar servicio"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => {
+                              setFormData(prev => ({ ...prev, massageType: m.name }));
+                              setShowServices(false);
+                            }}
+                            className="px-6 py-3 rounded-xl bg-spa-gold text-spa-base text-[10px] font-bold uppercase tracking-widest hover:bg-spa-accent hover:text-spa-base transition-all"
+                          >
+                            Reservar
+                          </button>
+                        </div>
                       </div>
                     ))
+                  )}
+
+                  {isAdminAuth && (
+                    <div className="pt-6 space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <input
+                          value={newMassage.name}
+                          onChange={(e) => setNewMassage((prev) => ({ ...prev, name: e.target.value }))}
+                          placeholder="Nombre"
+                          className="h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm md:col-span-3"
+                        />
+                        <input
+                          value={newMassage.price}
+                          onChange={(e) => setNewMassage((prev) => ({ ...prev, price: e.target.value }))}
+                          placeholder="Precio"
+                          className="h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm"
+                        />
+                        <input
+                          value={newMassage.duration}
+                          onChange={(e) => setNewMassage((prev) => ({ ...prev, duration: e.target.value }))}
+                          placeholder="Duración"
+                          className="h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm md:col-span-2"
+                        />
+                      </div>
+                      <button
+                        onClick={handleAddMassageType}
+                        className="w-full py-4 border-2 border-dashed border-spa-accent/30 rounded-xl text-spa-gold text-[10px] font-bold uppercase tracking-widest hover:bg-spa-accent/10 transition-all flex items-center justify-center gap-2"
+                      >
+                        <Plus size={16} />
+                        Añadir Servicio
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>

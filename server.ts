@@ -1,0 +1,648 @@
+import express from "express";
+import "dotenv/config";
+import { createServer as createViteServer } from "vite";
+import path from "path";
+import { google } from "googleapis";
+import { GoogleGenAI, Type } from "@google/genai";
+import { v4 as uuidv4 } from "uuid";
+
+import Database from "better-sqlite3";
+import fs from "fs";
+
+// Initialize persistent SQLite database
+const dataDir = path.join(process.cwd(), "data");
+if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
+const db = new Database(path.join(dataDir, "database.sqlite"));
+
+// Create tables if they don't exist
+db.exec(`
+  CREATE TABLE IF NOT EXISTS config (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    bannerUrl TEXT,
+    morningHours TEXT, -- JSON array of hours "HH:mm"
+    afternoonHours TEXT, -- JSON array of hours "HH:mm"
+    massageTypes TEXT -- JSON array of objects
+  );
+
+  CREATE TABLE IF NOT EXISTS appointments (
+    id TEXT PRIMARY KEY,
+    clientName TEXT,
+    clientEmail TEXT,
+    clientPhone TEXT,
+    startTime TEXT,
+    endTime TEXT,
+    status TEXT,
+    eventId TEXT,
+    massageType TEXT,
+    price TEXT,
+    duration TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS admin_auth (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    tokens TEXT -- JSON string
+  );
+`);
+
+// Initialize default config if empty
+const configCount = db.prepare("SELECT COUNT(*) as count FROM config").get() as { count: number };
+if (configCount.count === 0) {
+  db.prepare("INSERT INTO config (id, bannerUrl, morningHours, afternoonHours, massageTypes) VALUES (?, ?, ?, ?, ?)")
+    .run(1, "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80", 
+      JSON.stringify(["09:00", "10:00", "11:00", "12:00", "13:00"]), 
+      JSON.stringify(["15:00", "16:00", "17:00", "18:00", "19:00", "20:00"]),
+      JSON.stringify([
+        { id: "1", name: "Masaje Terapéutico", price: "50€", duration: "60 min" },
+        { id: "2", name: "Masaje Relajante", price: "45€", duration: "60 min" },
+        { id: "3", name: "Masaje Deportivo", price: "60€", duration: "60 min" }
+      ])
+    );
+} else {
+  // Migration: Add massageTypes column if it doesn't exist
+  try {
+    db.exec("ALTER TABLE config ADD COLUMN massageTypes TEXT");
+    db.prepare("UPDATE config SET massageTypes = ? WHERE id = 1")
+      .run(JSON.stringify([
+        { id: "1", name: "Masaje Terapéutico", price: "50€", duration: "60 min" },
+        { id: "2", name: "Masaje Relajante", price: "45€", duration: "60 min" },
+        { id: "3", name: "Masaje Deportivo", price: "60€", duration: "60 min" }
+      ]));
+  } catch (e) { /* column may already exist */ }
+}
+
+// Migration: Add price and duration columns to appointments if they don't exist
+try {
+  db.exec("ALTER TABLE appointments ADD COLUMN price TEXT");
+  db.exec("ALTER TABLE appointments ADD COLUMN duration TEXT");
+} catch (e) { /* columns may already exist */ }
+
+interface Appointment {
+  id: string;
+  clientName: string;
+  clientEmail: string;
+  clientPhone: string;
+  startTime: string; // ISO
+  endTime: string; // ISO
+  status: "confirmed" | "cancelled";
+  eventId?: string; // Google Calendar Event ID
+  massageType?: string;
+}
+
+
+const PORT = 3000;
+const CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
+const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
+const APP_URL = process.env.APP_URL || `http://localhost:${PORT}`;
+const REDIRECT_URI = `${APP_URL}/api/auth/google/callback`;
+
+const oauth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
+const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+
+// FIX: Persist refreshed tokens automatically so they don't expire after restart
+oauth2Client.on('tokens', (newTokens) => {
+  const current = (() => {
+    const row = db.prepare("SELECT tokens FROM admin_auth WHERE id = 1").get() as any;
+    return row ? JSON.parse(row.tokens) : null;
+  })();
+  if (current) {
+    db.prepare("UPDATE admin_auth SET tokens = ? WHERE id = 1")
+      .run(JSON.stringify({ ...current, ...newTokens }));
+  }
+});
+
+// Setup Gemini
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+async function startServer() {
+  const app = express();
+  app.use(express.json({ limit: "20mb" }));
+
+  // === API ROUTES ===
+
+  // Helper to get config
+  const getConfig = () => {
+    const row = db.prepare("SELECT * FROM config WHERE id = 1").get() as any;
+    return {
+      bannerUrl: row.bannerUrl,
+      morningHours: JSON.parse(row.morningHours),
+      afternoonHours: JSON.parse(row.afternoonHours),
+      massageTypes: row.massageTypes ? JSON.parse(row.massageTypes) : []
+    };
+  };
+
+  // Helper to get admin tokens
+  const getAdminTokens = () => {
+    const row = db.prepare("SELECT tokens FROM admin_auth WHERE id = 1").get() as any;
+    return row ? JSON.parse(row.tokens) : null;
+  };
+
+  const getAdminEmail = () => {
+    const data = getAdminTokens();
+    return data?.adminEmail || null;
+  };
+
+  // Load stored Google tokens on startup so oauth2Client can auto-refresh them
+  const storedTokens = getAdminTokens();
+  if (storedTokens) {
+    oauth2Client.setCredentials(storedTokens);
+  }
+
+  // Email Template Function
+  const getHtmlTemplate = (title: string, content: string, clientName: string, dateStr: string, appointmentId?: string, massageType?: string) => {
+  const config = getConfig();
+  const manageUrl = appointmentId ? `${APP_URL}/?manage=${appointmentId}` : APP_URL;
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#0E1410;font-family:Georgia,serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0E1410;padding:20px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#141A16;border:1px solid rgba(143,114,86,0.25);border-radius:16px;overflow:hidden;">
+        
+        <!-- HEADER -->
+        <tr>
+          <td style="background:#1a2018;padding:30px 40px;border-bottom:1px solid rgba(143,114,86,0.2);">
+            <p style="margin:0;font-family:Georgia,serif;font-size:28px;color:#F9F8F6;letter-spacing:1px;">Jean Pierre</p>
+            <p style="margin:4px 0 0;font-size:11px;color:#8F7256;letter-spacing:3px;text-transform:uppercase;">Massage Studio</p>
+          </td>
+        </tr>
+
+        <!-- BODY -->
+        <tr>
+          <td style="padding:35px 40px;">
+            <h1 style="margin:0 0 20px;font-family:Georgia,serif;font-size:28px;color:#F9F8F6;font-weight:normal;">${title}</h1>
+            <p style="margin:0 0 20px;font-size:15px;color:#A0A3A1;line-height:1.6;">Hola <strong style="color:#F9F8F6;">${clientName}</strong>,</p>
+            <div style="font-size:15px;color:#A0A3A1;line-height:1.7;">${content}</div>
+
+            <!-- INFO CARD -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#1E2520;border:1px solid rgba(143,114,86,0.15);border-radius:12px;margin:25px 0;">
+              <tr>
+                <td style="padding:20px 25px;">
+                  <table width="100%" cellpadding="6" cellspacing="0">
+                    <tr>
+                      <td style="font-size:10px;color:#8F7256;text-transform:uppercase;letter-spacing:1px;font-weight:700;width:100px;">Fecha</td>
+                      <td style="font-size:14px;color:#F9F8F6;font-weight:500;">${dateStr}</td>
+                    </tr>
+                    <tr>
+                      <td style="font-size:10px;color:#8F7256;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Servicio</td>
+                      <td style="font-size:14px;color:#F9F8F6;font-weight:500;">${massageType || 'Masaje Terapéutico'}</td>
+                    </tr>
+                    <tr>
+                      <td style="font-size:10px;color:#8F7256;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Ubicación</td>
+                      <td style="font-size:14px;color:#F9F8F6;font-weight:500;">Studio Jean Pierre</td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+
+            <p style="font-size:14px;color:#A0A3A1;line-height:1.6;">Si necesitas modificar o cancelar tu cita, puedes hacerlo desde el siguiente enlace:</p>
+            <a href="${manageUrl}" style="display:inline-block;background:#8F7256;color:#F9F8F6;text-decoration:none;padding:14px 28px;border-radius:10px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-top:10px;">Gestionar mi Cita</a>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td style="padding:20px 40px;border-top:1px solid rgba(255,255,255,0.06);background:#0E1410;text-align:center;">
+            <p style="margin:0;font-size:11px;color:#5A5D5B;">© 2026 Jean Pierre Massage Studio. Todos los derechos reservados.</p>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+};
+
+  const sendEmail = async (to: string, subject: string, html: string) => {
+  const tokens = getAdminTokens();
+  if (!tokens) return;
+  
+  oauth2Client.setCredentials(tokens);
+  const fromEmail = getAdminEmail() || "me";
+  
+  const encodedSubject = Buffer.from(subject, 'utf-8').toString('base64');
+  
+  // NO codificar el HTML en base64 — mandarlo como UTF-8 directamente
+  const message = [
+    `To: ${to}`,
+    `From: "Jean Pierre Vegas" <${fromEmail}>`,
+    `Subject: =?utf-8?B?${encodedSubject}?=`,
+    `MIME-Version: 1.0`,
+    `Content-Type: text/html; charset=utf-8`,
+    `Content-Transfer-Encoding: 8bit`,  // ← cambio clave
+    ``,
+    html  // ← HTML plano, sin encodear
+  ].join('\r\n');
+
+  const encodedMessage = Buffer.from(message, "utf-8")
+    .toString("base64url");
+
+  await gmail.users.messages.send({
+    userId: "me",
+    requestBody: { raw: encodedMessage }
+  });
+};
+
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok" });
+  });
+
+  app.get("/api/app-config", (req, res) => {
+    res.json(getConfig());
+  });
+
+  app.put("/api/app-config", (req, res) => {
+    const { bannerUrl, morningHours, afternoonHours, massageTypes } = req.body;
+    const current = getConfig();
+    
+    db.prepare("UPDATE config SET bannerUrl = ?, morningHours = ?, afternoonHours = ?, massageTypes = ? WHERE id = 1")
+      .run(
+        bannerUrl || current.bannerUrl,
+        morningHours ? JSON.stringify(morningHours) : JSON.stringify(current.morningHours),
+        afternoonHours ? JSON.stringify(afternoonHours) : JSON.stringify(current.afternoonHours),
+        massageTypes ? JSON.stringify(massageTypes) : JSON.stringify(current.massageTypes)
+      );
+    
+    res.json(getConfig());
+  });
+
+  app.get("/api/config", (req, res) => {
+    res.json({ 
+      hasCredentials: !!(CLIENT_ID && CLIENT_SECRET),
+      isGoogleConnected: !!getAdminTokens() 
+    });
+  });
+
+  // Admin OAuth flow
+  app.get("/api/auth/google", (req, res) => {
+    if (!CLIENT_ID) {
+       return res.status(500).send("Falta GOOGLE_CLIENT_ID en variables de entorno.");
+    }
+    const url = oauth2Client.generateAuthUrl({
+      access_type: "offline",
+      prompt: "consent",
+      scope: [
+        "https://www.googleapis.com/auth/calendar",
+        "https://www.googleapis.com/auth/gmail.send",
+        "https://www.googleapis.com/auth/userinfo.email"
+      ]
+    });
+    res.redirect(url);
+  });
+
+  app.get("/api/auth/google/callback", async (req, res) => {
+    const code = req.query.code as string;
+    if (code) {
+      try {
+        const { tokens } = await oauth2Client.getToken(code);
+        
+        const oauth2 = google.oauth2({ auth: oauth2Client, version: "v2" });
+        oauth2Client.setCredentials(tokens);
+        const userInfo = await oauth2.userinfo.get();
+        const userEmail = userInfo.data.email;
+        
+        const authorizedEmail = process.env.ADMIN_EMAIL;
+        
+        if (!authorizedEmail || userEmail !== authorizedEmail) {
+           return res.status(403).send("No autorizado");
+        }
+
+        db.prepare("INSERT OR REPLACE INTO admin_auth (id, tokens) VALUES (1, ?)")
+          .run(JSON.stringify({ ...tokens, adminEmail: userEmail }));
+        
+        res.redirect("/?admin=true");
+      } catch (e) {
+        res.status(500).send("Error en la autenticación: " + String(e));
+      }
+    } else {
+      res.redirect("/");
+    }
+  });
+
+  // Appointments API
+  app.get("/api/appointments", (req, res) => {
+    const rows = db.prepare("SELECT * FROM appointments").all() as any[];
+    res.json(rows);
+  });
+
+  app.post("/api/appointments", async (req, res) => {
+    const { clientName, clientEmail, clientPhone, startTime, endTime, massageType, price, duration } = req.body;
+    
+    if (!clientName || !clientEmail || !startTime || !endTime) {
+      return res.status(400).json({ error: "Faltan datos requeridos." });
+    }
+
+    const id = uuidv4();
+    let eventId = null;
+
+    const tokens = getAdminTokens();
+    if (tokens) {
+      try {
+        oauth2Client.setCredentials(tokens);
+        const event = await calendar.events.insert({
+          calendarId: "primary",
+          requestBody: {
+            summary: `Masaje: ${clientName}`,
+            description: `Teléfono: ${clientPhone}\nEmail: ${clientEmail}`,
+            start: { dateTime: startTime, timeZone: "Europe/Madrid" },
+            end: { dateTime: endTime, timeZone: "Europe/Madrid" },
+            attendees: [{ email: clientEmail }]
+          }
+        });
+        eventId = event.data.id;
+      } catch (err) {
+        console.error("Calendar Error:", err);
+      }
+    }
+
+    db.prepare("INSERT INTO appointments (id, clientName, clientEmail, clientPhone, startTime, endTime, status, eventId, massageType, price, duration) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(id, clientName, clientEmail, clientPhone, startTime, endTime, 'confirmed', eventId, massageType, price || null, duration || null);
+
+    // Send emails in background (don't block the response)
+    if (tokens) {
+      const dateStr = new Date(startTime).toLocaleString('es-ES', { 
+        weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid'
+      });
+      
+      // Email to client
+      const clientHtml = getHtmlTemplate(
+        "Cita Confirmada", 
+        "<p>Tu sesión de masaje ha sido reservada con éxito. Estamos deseando recibirte para brindarte la mejor experiencia de relajación.</p>",
+        clientName,
+        dateStr,
+        id,
+        massageType
+      );
+      sendEmail(clientEmail, "Confirmación de Reserva - Jean Pierre", clientHtml).catch(e => console.error("Email error:", e));
+
+      // Email to admin
+      const adminEmail = getAdminEmail();
+      if (adminEmail) {
+        const adminHtml = getHtmlTemplate(
+          "Nueva Reserva",
+          `<p>Has recibido una nueva reserva de <span style="color: #F9F8F6;">${clientName}</span>.</p>
+           <p>Email: ${clientEmail}<br>Tel: ${clientPhone || 'No prop.'}<br>Servicio: ${massageType || 'Masaje Terapéutico'}</p>`,
+          "Jean Pierre",
+          dateStr,
+          id,
+          massageType
+        );
+        sendEmail(adminEmail, `Nueva Cita: ${clientName}`, adminHtml).catch(e => console.error("Admin email error:", e));
+      }
+    }
+
+    res.json({ id, clientName, clientEmail, clientPhone, startTime, endTime, status: 'confirmed', eventId, massageType });
+  });
+
+  app.put("/api/appointments/:id", async (req, res) => {
+    const { id } = req.params;
+    const { startTime, endTime } = req.body;
+    const appt = db.prepare("SELECT * FROM appointments WHERE id = ?").get(id) as any;
+    if (!appt) return res.status(404).json({ error: "No encontrado" });
+
+    const now = new Date();
+    if (new Date(appt.startTime) < now) {
+      return res.status(400).json({ error: "No se puede modificar una cita pasada" });
+    }
+
+    const newStart = startTime || appt.startTime;
+    const newEnd = endTime || appt.endTime;
+
+    const tokens = getAdminTokens();
+    if (tokens && appt.eventId) {
+      try {
+        oauth2Client.setCredentials(tokens);
+        await calendar.events.patch({
+          calendarId: "primary",
+          eventId: appt.eventId,
+          requestBody: {
+            start: { dateTime: newStart },
+            end: { dateTime: newEnd }
+          }
+        });
+        
+        const dateStr = new Date(newStart).toLocaleString('es-ES', { 
+          weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' 
+        });
+        const html = getHtmlTemplate(
+          "Cita Reagendada",
+          "<p>Tu cita ha sido modificada a un nuevo horario. Por favor, asegúrate de anotar la nueva fecha en tu calendario.</p>",
+          appt.clientName,
+          dateStr
+        );
+        await sendEmail(appt.clientEmail, "Actualización de tu Cita - Jean Pierre", html);
+
+        // FIX: Use stored admin email instead of calling Gmail API (avoids failure on expired token)
+        const adminEmail = getAdminEmail();
+        if (adminEmail) {
+          const adminHtml = getHtmlTemplate(
+            "Cita Reagendada",
+            `<p>La cita de <span style="color: #F9F8F6;">${appt.clientName}</span> ha sido modificada.</p>
+             <p>Nuevo horario: ${dateStr}<br>Email: ${appt.clientEmail}</p>`,
+            "Jean Pierre",
+            dateStr
+          );
+          await sendEmail(adminEmail, `Cita Reagendada: ${appt.clientName}`, adminHtml);
+        }
+      } catch (e) { console.error(e); }
+    }
+    
+    db.prepare("UPDATE appointments SET startTime = ?, endTime = ? WHERE id = ?").run(newStart, newEnd, id);
+    res.json({ ...appt, startTime: newStart, endTime: newEnd });
+  });
+
+  app.delete("/api/appointments/:id", async (req, res) => {
+    const { id } = req.params;
+    const { reason } = req.body;
+    
+    const appt = db.prepare("SELECT * FROM appointments WHERE id = ?").get(id) as any;
+    if (!appt) return res.status(404).json({ error: "No encontrado" });
+
+    console.log("DELETE request for appointment:", id);
+
+    const tokens = getAdminTokens();
+    if (tokens && appt.eventId) {
+      try {
+        oauth2Client.setCredentials(tokens);
+        await calendar.events.delete({ calendarId: "primary", eventId: appt.eventId });
+        
+        const dateStr = new Date(appt.startTime).toLocaleString('es-ES', { 
+          weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid'
+        });
+        const html = getHtmlTemplate(
+          "Cita Cancelada",
+          `<p>Lamentamos informarte que tu cita ha sido cancelada.</p>
+           ${reason ? `<p style="background: rgba(143,114,86,0.1); padding: 15px; border-radius: 10px; font-style: italic;">Motivo: ${reason}</p>` : ''}`,
+          appt.clientName,
+          dateStr
+        );
+        await sendEmail(appt.clientEmail, "Cita Cancelada - Jean Pierre", html);
+
+        // FIX: Use stored admin email instead of calling Gmail API (avoids failure on expired token)
+        const adminEmail = getAdminEmail();
+        if (adminEmail) {
+          const adminHtml = getHtmlTemplate(
+            "Cita Cancelada",
+            `<p>La cita de <span style="color: #F9F8F6;">${appt.clientName}</span> ha sido cancelada.</p>
+             <p>Fecha: ${dateStr}<br>Email: ${appt.clientEmail}${reason ? `<br>Motivo: ${reason}` : ''}</p>`,
+            "Jean Pierre",
+            dateStr
+          );
+          await sendEmail(adminEmail, `Cita Cancelada: ${appt.clientName}`, adminHtml);
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    db.prepare("DELETE FROM appointments WHERE id = ?").run(id);
+    console.log("Appointment deleted from DB:", id);
+    res.json({ success: true });
+  });
+
+  // BOT API
+  app.post("/api/bot/verify", (req, res) => {
+    const { email, verification } = req.body;
+    if (!email || !verification) return res.status(400).json({ error: "Email y verificación requeridos" });
+    
+    const matched = db.prepare("SELECT * FROM appointments WHERE LOWER(clientEmail) = ?").all(email.trim().toLowerCase()) as any[];
+    const now = new Date().toISOString();
+    const filtered = matched.filter(a => 
+      (a.clientPhone.replace(/\s+/g, '') === verification.replace(/\s+/g, '') || 
+      a.clientName.toLowerCase().includes(verification.trim().toLowerCase())) &&
+      a.startTime > now
+    );
+    
+    if (filtered.length > 0) res.json(filtered);
+    else res.status(404).json({ error: "No se encontraron citas futuras." });
+  });
+
+  app.post("/api/bot/appointments/:id/reschedule", async (req, res) => {
+    const { id } = req.params;
+    const { newStartTime } = req.body;
+    const appt = db.prepare("SELECT * FROM appointments WHERE id = ?").get(id) as any;
+    if (!appt) return res.status(404).json({ error: "Cita no encontrada" });
+
+    const now = new Date();
+    if (new Date(appt.startTime) < now) {
+      return res.status(400).json({ error: "No se puede reagendar una cita pasada" });
+    }
+
+    const newEnd = new Date(new Date(newStartTime).getTime() + 60*60*1000).toISOString();
+    const tokens = getAdminTokens();
+
+    if (tokens && appt.eventId) {
+      try {
+        oauth2Client.setCredentials(tokens);
+        await calendar.events.patch({
+          calendarId: "primary",
+          eventId: appt.eventId,
+          requestBody: { start: { dateTime: newStartTime }, end: { dateTime: newEnd } }
+        });
+
+        const dateStr = new Date(newStartTime).toLocaleString('es-ES');
+        const html = getHtmlTemplate("Cita Reagendada", "<p>Tu cita ha sido movida con éxito a través del asistente virtual.</p>", appt.clientName, dateStr);
+        await sendEmail(appt.clientEmail, "Cita Reagendada - Jean Pierre", html);
+      } catch (e) { console.error(e); }
+    }
+
+    db.prepare("UPDATE appointments SET startTime = ?, endTime = ? WHERE id = ?").run(newStartTime, newEnd, id);
+    res.json({ ...appt, startTime: newStartTime, endTime: newEnd });
+  });
+
+  // AI Chat Route
+  app.post("/api/chat", async (req, res) => {
+     try {
+       const { messages } = req.body;
+       const appointments = db.prepare("SELECT * FROM appointments").all() as any[];
+       const config = getConfig();
+
+       const chat = ai.chats.create({
+         model: "gemini-1.5-flash",
+         config: {
+           systemInstruction: `Eres el Asistente Concierge de Jean Pierre Massage Studio.
+             Tu objetivo es ayudar a los clientes con sus reservas de forma profesional y elegante.
+             
+             SERVICIOS DISPONIBLES:
+             ${config.massageTypes.map(m => `- ${m.name}: ${m.price} (${m.duration})`).join('\n')}
+             
+             HORARIOS:
+             Mañana: ${config.morningHours.join(', ')}
+             Tarde: ${config.afternoonHours.join(', ')}
+             
+             REGLAS:
+             - Las citas duran 1 hora.
+             - Sé amable, servicial y usa un tono premium.
+             - Si el usuario pregunta por precios o tipos de masaje, usa la lista anterior.`,
+           tools: [{
+             functionDeclarations: [
+               { name: "getAppointments", description: "Lista de todas las citas.", parameters: { type: Type.OBJECT, properties: {} } },
+               { name: "bookAppointment", description: "Agenda cita.", parameters: { type: Type.OBJECT, properties: { clientName: { type: Type.STRING }, clientEmail: { type: Type.STRING }, clientPhone: { type: Type.STRING }, startTime: { type: Type.STRING }, massageType: { type: Type.STRING } }, required: ["clientName", "clientEmail", "startTime", "massageType"] } },
+               { name: "cancelAppointment", description: "Cancela cita por ID.", parameters: { type: Type.OBJECT, properties: { appointmentId: { type: Type.STRING } }, required: ["appointmentId"] } },
+               { name: "updateAppointment", description: "Reagenda cita.", parameters: { type: Type.OBJECT, properties: { appointmentId: { type: Type.STRING }, newStartTime: { type: Type.STRING } }, required: ["appointmentId", "newStartTime"] } }
+             ]
+           }],
+         }
+       });
+
+       const lastMsg = messages[messages.length - 1];
+       const result = await chat.sendMessage({ message: lastMsg.content });
+       
+       let responseText = result.text || "";
+       let newAppointments = null;
+
+       if (result.functionCalls && result.functionCalls.length > 0) {
+          const fnCall = result.functionCalls[0];
+          
+          if (fnCall.name === "getAppointments") {
+             responseText = "Citas actuales: " + JSON.stringify(appointments.map(a => ({ id: a.id, name: a.clientName, time: a.startTime })));
+          } else if (fnCall.name === "bookAppointment") {
+             const args = fnCall.args as any;
+             const endTime = new Date(new Date(args.startTime).getTime() + 60*60*1000).toISOString();
+             const id = uuidv4();
+             
+db.prepare("INSERT INTO appointments (id, clientName, clientEmail, clientPhone, startTime, endTime, status, massageType, price, duration) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                .run(id, args.clientName, args.clientEmail, args.clientPhone || "", args.startTime, endTime, 'confirmed', args.massageType || 'Masaje Terapéutico', args.price || null, args.duration || null);
+             
+             responseText = `¡Cita agendada para ${args.clientName} (${args.massageType || 'Masaje Terapéutico'}) a las ${new Date(args.startTime).toLocaleString('es-ES')}!`;
+          } else if (fnCall.name === "cancelAppointment") {
+             const args = fnCall.args as any;
+             db.prepare("DELETE FROM appointments WHERE id = ?").run(args.appointmentId);
+             responseText = `Cita cancelada.`;
+          } else if (fnCall.name === "updateAppointment") {
+             const args = fnCall.args as any;
+             const endTime = new Date(new Date(args.newStartTime).getTime() + 60*60*1000).toISOString();
+             db.prepare("UPDATE appointments SET startTime = ?, endTime = ? WHERE id = ?").run(args.newStartTime, endTime, args.appointmentId);
+             responseText = `Cita movida a las ${new Date(args.newStartTime).toLocaleString('es-ES')}.`;
+          }
+       }
+       res.json({ reply: responseText, functionCalled: result.functionCalls?.[0]?.name, newAppointments });
+     } catch(e) {
+        console.error(e);
+        res.status(500).json({error: "Error AI"});
+     }
+  });
+
+
+  // Vite middleware for development
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+startServer();

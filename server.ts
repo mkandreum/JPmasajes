@@ -501,6 +501,77 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  // Resend confirmation email for an appointment
+  app.post("/api/appointments/:id/resend-email", async (req, res) => {
+    const { id } = req.params;
+    const appt = db.prepare("SELECT * FROM appointments WHERE id = ?").get(id) as any;
+    if (!appt) return res.status(404).json({ error: "Cita no encontrada" });
+
+    const tokens = getAdminTokens();
+    if (!tokens) return res.status(401).json({ error: "Google no conectado" });
+
+    const dateStr = new Date(appt.startTime).toLocaleString('es-ES', {
+      weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid'
+    });
+
+    const html = getHtmlTemplate(
+      "Cita Confirmada",
+      "<p>Tu sesión de masaje ha sido reservada con éxito. Estamos deseando recibirte para brindarte la mejor experiencia de relajación.</p>",
+      appt.clientName,
+      dateStr,
+      id,
+      appt.massageType
+    );
+
+    try {
+      await sendEmail(appt.clientEmail, "Confirmación de Reserva - Jean Pierre", html);
+      res.json({ success: true });
+    } catch (e) {
+      console.error("Resend email error:", e);
+      res.status(500).json({ error: "Error al reenviar el correo" });
+    }
+  });
+
+  // Add appointment to admin's Google Calendar
+  app.post("/api/appointments/:id/add-to-calendar", async (req, res) => {
+    const { id } = req.params;
+    const appt = db.prepare("SELECT * FROM appointments WHERE id = ?").get(id) as any;
+    if (!appt) return res.status(404).json({ error: "Cita no encontrada" });
+
+    const tokens = getAdminTokens();
+    if (!tokens) return res.status(401).json({ error: "Google no conectado" });
+
+    try {
+      oauth2Client.setCredentials(tokens);
+
+      if (appt.eventId) {
+        try {
+          await calendar.events.get({ calendarId: "primary", eventId: appt.eventId });
+          return res.json({ success: true, eventId: appt.eventId, message: "El evento ya existe en el calendario" });
+        } catch (e) {
+          // Event was deleted from Google Calendar, create a new one
+        }
+      }
+
+      const event = await calendar.events.insert({
+        calendarId: "primary",
+        requestBody: {
+          summary: `Masaje: ${appt.clientName}`,
+          description: `Teléfono: ${appt.clientPhone}\nEmail: ${appt.clientEmail}\nServicio: ${appt.massageType || 'No especificado'}`,
+          start: { dateTime: appt.startTime, timeZone: "Europe/Madrid" },
+          end: { dateTime: appt.endTime, timeZone: "Europe/Madrid" },
+          attendees: [{ email: appt.clientEmail }]
+        }
+      });
+
+      db.prepare("UPDATE appointments SET eventId = ? WHERE id = ?").run(event.data.id, id);
+      res.json({ success: true, eventId: event.data.id });
+    } catch (e) {
+      console.error("Add to calendar error:", e);
+      res.status(500).json({ error: "Error al añadir al calendario" });
+    }
+  });
+
   // BOT API
   app.post("/api/bot/verify", (req, res) => {
     const { email, verification } = req.body;

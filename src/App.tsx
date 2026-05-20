@@ -286,6 +286,34 @@ export default function App() {
     }
   };
 
+  const handleResendEmail = async (appt: Appointment) => {
+    try {
+      const res = await fetch(`/api/appointments/${appt.id}/resend-email`, { method: "POST" });
+      if (res.ok) {
+        toast.success("Correo reenviado correctamente");
+      } else {
+        const err = await res.json();
+        toast.error(err.error || "Error al reenviar correo");
+      }
+    } catch {
+      toast.error("Error de conexión al reenviar correo");
+    }
+  };
+
+  const handleAddToCalendar = async (appt: Appointment) => {
+    try {
+      const res = await fetch(`/api/appointments/${appt.id}/add-to-calendar`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(data.message || "Añadido al calendario correctamente");
+      } else {
+        toast.error(data.error || "Error al añadir al calendario");
+      }
+    } catch {
+      toast.error("Error de conexión al añadir al calendario");
+    }
+  };
+
   const handleAdminReschedule = async (newSlot: Date) => {
     if (!rescheduleApptId) return;
     await fetch(`/api/appointments/${rescheduleApptId}`, {
@@ -610,6 +638,8 @@ export default function App() {
                       ) : (
                         <div className="flex gap-3 pt-2">
                           <button onClick={() => { setAdminRescheduleSlot(new Date()); setRescheduleApptId(viewingAppt!.id!); setViewingAppt(null); toast.info("Selecciona un horario disponible en el calendario"); }} className="flex-1 py-4 bg-spa-accent/10 border border-spa-accent/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-spa-gold hover:bg-spa-accent hover:text-spa-base transition-all">Reagendar</button>
+                          <button onClick={() => { handleResendEmail(viewingAppt); }} className="flex-1 py-4 bg-blue-500/10 border border-blue-500/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-blue-400 hover:bg-blue-500 hover:text-white transition-all"><Mail size={14} className="inline mr-1" />Correo</button>
+                          <button onClick={() => { handleAddToCalendar(viewingAppt); }} className="flex-1 py-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all"><CalendarIcon size={14} className="inline mr-1" />Calendario</button>
                           <button onClick={() => handleAdminCancel(viewingAppt)} className="flex-1 py-4 bg-rose-500/10 border border-rose-500/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-rose-500 hover:bg-rose-500 hover:text-white transition-all">Cancelar</button>
                         </div>
                       )}
@@ -883,15 +913,31 @@ export default function App() {
                                 </p>
                               </div>
 
-                              <button
-                                onClick={() => {
-                                  setViewingAppt(appt);
-                                  setShowAdminPanel(false);
-                                }}
-                                className="text-[10px] font-bold uppercase tracking-widest text-spa-gold hover:underline"
-                              >
-                                Ver
-                              </button>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleResendEmail(appt); }}
+                                  className="text-[9px] font-bold uppercase tracking-widest text-spa-gold/60 hover:text-spa-gold transition-colors"
+                                  title="Reenviar correo"
+                                >
+                                  <Mail size={14} />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleAddToCalendar(appt); }}
+                                  className="text-[9px] font-bold uppercase tracking-widest text-spa-gold/60 hover:text-spa-gold transition-colors"
+                                  title="Añadir al calendario"
+                                >
+                                  <CalendarIcon size={14} />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setViewingAppt(appt);
+                                    setShowAdminPanel(false);
+                                  }}
+                                  className="text-[10px] font-bold uppercase tracking-widest text-spa-gold hover:underline"
+                                >
+                                  Ver
+                                </button>
+                              </div>
                             </div>
                           ))}
                       </div>

@@ -562,36 +562,34 @@ export default function App() {
                     <form onSubmit={handleBook} className="space-y-4 sm:space-y-5">
                       <div className="space-y-2">
                          <label className="text-[9px] font-bold text-spa-gold uppercase tracking-widest px-1">Selecciona Masaje</label>
-                         <div className="grid grid-cols-1 gap-2">
-                            {config.massageTypes.map(m => (
-                              <div key={m.id} className="flex items-center gap-2">
-                                <button 
-                                 type="button"
-                                 onClick={() => setFormData({...formData, massageType: m.name})}
-                                 className={cn(
-                                   "flex-1 flex items-center justify-between p-3 rounded-xl border text-left transition-all",
-                                   formData.massageType === m.name ? "bg-spa-accent/20 border-spa-gold" : "bg-spa-elevated border-white/5"
-                                 )}
-                                >
-                                  <div>
-                                    <p className="text-xs font-bold">{m.name}</p>
-                                    <p className="text-[9px] opacity-60">{m.duration}</p>
-                                  </div>
-                                  <span className="text-xs font-bold text-spa-gold">{m.price}</span>
-                                </button>
-                                {m.description && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setInfoModalMassage({ name: m.name, description: m.description })}
-                                    className="shrink-0 w-10 h-10 rounded-xl bg-spa-accent/10 border border-spa-accent/30 flex items-center justify-center text-spa-gold hover:bg-spa-gold hover:text-spa-base transition-all text-[9px] font-bold"
-                                    title="Más información"
+                          <div className="grid grid-cols-1 gap-2">
+                            {config.massageTypes.map(m => {
+                              const isSelected = formData.massageType === m.name;
+                              return (
+                                <div key={m.id}>
+                                  <button 
+                                   type="button"
+                                   onClick={() => setFormData({...formData, massageType: isSelected ? "" : m.name})}
+                                   className={cn(
+                                     "w-full flex items-center justify-between p-3 rounded-xl border text-left transition-all",
+                                     isSelected ? "bg-spa-accent/20 border-spa-gold rounded-b-none" : "bg-spa-elevated border-white/5"
+                                   )}
                                   >
-                                    +info
+                                    <div>
+                                      <p className="text-xs font-bold">{m.name}</p>
+                                      <p className="text-[9px] opacity-60">{m.duration}</p>
+                                    </div>
+                                    <span className="text-xs font-bold text-spa-gold">{m.price}</span>
                                   </button>
-                                )}
-                              </div>
-                            ))}
-                         </div>
+                                  {isSelected && m.description && (
+                                    <div className="bg-spa-accent/10 border border-t-0 border-spa-gold rounded-b-xl px-3 py-2.5 text-[10px] text-[#A0A3A1] leading-relaxed">
+                                      {m.description}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                       </div>
                       <div className="floating-label-group">
                         <input required className="w-full h-12 sm:h-14 bg-spa-elevated rounded-lg sm:rounded-xl px-4 sm:px-5 outline-none border border-white/5 focus:border-spa-gold transition-all text-sm" placeholder=" " value={formData.clientName} onChange={e => setFormData({...formData, clientName: e.target.value})}/>

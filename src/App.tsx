@@ -26,7 +26,7 @@ interface AppConfig {
   bannerUrl: string;
   morningHours: string[];
   afternoonHours: string[];
-  massageTypes: { id: string; name: string; price: string; duration: string }[];
+  massageTypes: { id: string; name: string; price: string; duration: string; description: string }[];
 }
 
 export default function App() {
@@ -58,7 +58,9 @@ export default function App() {
     name: "",
     price: "",
     duration: "",
+    description: "",
   });
+  const [infoModalMassage, setInfoModalMassage] = useState<{ name: string; description: string } | null>(null);
   
   // Parallax Effect
   const heroRef = useRef(null);
@@ -175,6 +177,7 @@ export default function App() {
           name: newMassage.name.trim(),
           price: newMassage.price.trim(),
           duration: newMassage.duration.trim(),
+          description: newMassage.description.trim(),
         },
       ],
     });
@@ -183,6 +186,7 @@ export default function App() {
       name: "",
       price: "",
       duration: "",
+      description: "",
     });
   };
 
@@ -553,22 +557,34 @@ export default function App() {
                       <div className="space-y-2">
                          <label className="text-[9px] font-bold text-spa-gold uppercase tracking-widest px-1">Selecciona Masaje</label>
                          <div className="grid grid-cols-1 gap-2">
-                           {config.massageTypes.map(m => (
-                             <button 
-                              type="button" key={m.id}
-                              onClick={() => setFormData({...formData, massageType: m.name})}
-                              className={cn(
-                                "flex items-center justify-between p-3 rounded-xl border text-left transition-all",
-                                formData.massageType === m.name ? "bg-spa-accent/20 border-spa-gold" : "bg-spa-elevated border-white/5"
-                              )}
-                             >
-                               <div>
-                                 <p className="text-xs font-bold">{m.name}</p>
-                                 <p className="text-[9px] opacity-60">{m.duration}</p>
-                               </div>
-                               <span className="text-xs font-bold text-spa-gold">{m.price}</span>
-                             </button>
-                           ))}
+                            {config.massageTypes.map(m => (
+                              <div key={m.id} className="flex items-center gap-2">
+                                <button 
+                                 type="button"
+                                 onClick={() => setFormData({...formData, massageType: m.name})}
+                                 className={cn(
+                                   "flex-1 flex items-center justify-between p-3 rounded-xl border text-left transition-all",
+                                   formData.massageType === m.name ? "bg-spa-accent/20 border-spa-gold" : "bg-spa-elevated border-white/5"
+                                 )}
+                                >
+                                  <div>
+                                    <p className="text-xs font-bold">{m.name}</p>
+                                    <p className="text-[9px] opacity-60">{m.duration}</p>
+                                  </div>
+                                  <span className="text-xs font-bold text-spa-gold">{m.price}</span>
+                                </button>
+                                {m.description && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setInfoModalMassage({ name: m.name, description: m.description })}
+                                    className="shrink-0 w-10 h-10 rounded-xl bg-spa-accent/10 border border-spa-accent/30 flex items-center justify-center text-spa-gold hover:bg-spa-gold hover:text-spa-base transition-all text-[9px] font-bold"
+                                    title="Más información"
+                                  >
+                                    +info
+                                  </button>
+                                )}
+                              </div>
+                            ))}
                          </div>
                       </div>
                       <div className="floating-label-group">
@@ -786,6 +802,9 @@ export default function App() {
                             <p className="text-[10px] text-[#7A7D7B]">
                               {m.duration} • {m.price}
                             </p>
+                            {m.description && (
+                              <p className="text-[10px] text-[#A0A3A1] mt-1 line-clamp-2">{m.description}</p>
+                            )}
                           </div>
                           <button
                             onClick={() =>
@@ -825,7 +844,16 @@ export default function App() {
                           setNewMassage((prev) => ({ ...prev, duration: e.target.value }))
                         }
                         placeholder="Duración"
-                        className="h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm md:col-span-2"
+                        className="h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm"
+                      />
+                      <textarea
+                        value={newMassage.description}
+                        onChange={(e) =>
+                          setNewMassage((prev) => ({ ...prev, description: e.target.value }))
+                        }
+                        placeholder="Descripción"
+                        rows={3}
+                        className="h-24 bg-spa-elevated border border-white/5 rounded-xl px-4 py-3 outline-none focus:border-spa-gold text-sm resize-none md:col-span-3"
                       />
                     </div>
 
@@ -1116,6 +1144,9 @@ export default function App() {
                             <span className="text-sm font-bold text-spa-gold">{m.price}</span>
                             <span className="text-[10px] text-[#7A7D7B] uppercase tracking-widest">{m.duration}</span>
                           </div>
+                          {m.description && (
+                            <p className="text-xs text-[#A0A3A1] mt-3 leading-relaxed">{m.description}</p>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           {isAdminAuth && (
@@ -1179,6 +1210,33 @@ export default function App() {
                   )}
                 </div>
               </div>
+            </motion.div>
+          )}
+
+          {/* Info Modal */}
+          {infoModalMassage && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setInfoModalMassage(null)}
+              className="absolute inset-0 z-[150] bg-black/60 backdrop-blur-md flex items-end sm:items-center justify-center p-6"
+            >
+              <motion.div
+                initial={{ y: 50, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 50, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-sm bg-spa-card rounded-[24px] sm:rounded-[32px] border border-white/10 shadow-2xl overflow-hidden"
+              >
+                <div className="p-6 sm:p-8">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xl font-serif text-spa-crema">{infoModalMassage.name}</h3>
+                    <button onClick={() => setInfoModalMassage(null)} className="p-1.5 bg-spa-elevated rounded-full hover:text-spa-gold transition-colors"><X size={18}/></button>
+                  </div>
+                  <p className="text-sm text-[#A0A3A1] leading-relaxed">{infoModalMassage.description}</p>
+                </div>
+              </motion.div>
             </motion.div>
           )}
 

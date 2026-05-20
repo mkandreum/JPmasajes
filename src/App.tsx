@@ -913,27 +913,27 @@ export default function App() {
                                 </p>
                               </div>
 
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1">
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleResendEmail(appt); }}
-                                  className="text-[9px] font-bold uppercase tracking-widest text-spa-gold/60 hover:text-spa-gold transition-colors"
+                                  className="px-2 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white transition-all"
                                   title="Reenviar correo"
                                 >
-                                  <Mail size={14} />
+                                  <Mail size={12} className="inline mr-1" />Email
                                 </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleAddToCalendar(appt); }}
-                                  className="text-[9px] font-bold uppercase tracking-widest text-spa-gold/60 hover:text-spa-gold transition-colors"
+                                  className="px-2 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all"
                                   title="Añadir al calendario"
                                 >
-                                  <CalendarIcon size={14} />
+                                  <CalendarIcon size={12} className="inline mr-1" />Cal
                                 </button>
                                 <button
                                   onClick={() => {
                                     setViewingAppt(appt);
                                     setShowAdminPanel(false);
                                   }}
-                                  className="text-[10px] font-bold uppercase tracking-widest text-spa-gold hover:underline"
+                                  className="px-2 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest bg-spa-accent/10 text-spa-gold hover:bg-spa-accent hover:text-spa-base transition-all"
                                 >
                                   Ver
                                 </button>
@@ -1031,8 +1031,22 @@ export default function App() {
                                         {isPast && <span className="ml-2 text-emerald-500">✓</span>}
                                       </p>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-sm font-bold text-spa-gold">
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        onClick={() => handleResendEmail(appt)}
+                                        className="p-1.5 text-[#7A7D7B] hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
+                                        title="Reenviar correo"
+                                      >
+                                        <Mail size={14} />
+                                      </button>
+                                      <button
+                                        onClick={() => handleAddToCalendar(appt)}
+                                        className="p-1.5 text-[#7A7D7B] hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-all"
+                                        title="Añadir al calendario"
+                                      >
+                                        <CalendarIcon size={14} />
+                                      </button>
+                                      <span className="text-sm font-bold text-spa-gold mx-1">
                                         {price > 0 ? `${price.toFixed(2)}€` : "—"}
                                       </span>
                                       <button

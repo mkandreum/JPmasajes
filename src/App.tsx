@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Menu, User, Clock, ChevronLeft, ChevronRight, X, Calendar as CalendarIcon, Phone, Mail, Leaf, MessageCircle, Send, LogOut, Sun, Moon, Plus, Trash2 } from "lucide-react";
+import { Menu, User, Clock, ChevronLeft, ChevronRight, X, Calendar as CalendarIcon, Phone, Mail, Leaf, MessageCircle, Send, LogOut, Sun, Moon, Plus, Trash2, Eye, Check, Sparkles } from "lucide-react";
 import { format, addDays, startOfToday, parseISO, isSameDay, setHours, setMinutes, isBefore, isAfter } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast, Toaster } from "sonner";
@@ -417,8 +417,9 @@ export default function App() {
             src={config.bannerUrl} 
             className="w-full h-full object-cover opacity-40 scale-105 object-[50%_30%]"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-spa-base via-spa-base/40 to-black/60" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(143,114,86,0.15),transparent_60%)]" />
+          <div className="absolute inset-0 bg-gradient-to-t from-spa-base via-spa-base/20 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-b from-spa-gold/10 via-spa-accent/5 to-transparent" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(201,169,110,0.15),transparent_70%)]" />
           <div className="absolute top-0 left-0 right-0 p-8 flex justify-between items-start z-20">
             <div className="flex flex-col">
               <h1 className="text-3xl md:text-4xl font-serif text-spa-crema tracking-tight">Jean Pierre</h1>
@@ -440,7 +441,7 @@ export default function App() {
 
         {/* Date Picker */}
         <div className="-mt-12 z-30 relative">
-          <div className="flex gap-3 overflow-x-auto no-scrollbar py-8 px-8">
+          <div className="flex gap-3 overflow-x-auto no-scrollbar py-8 px-6 sm:px-8">
             {upcomingDays.map((day) => {
               const active = isSameDay(day, selectedDate);
               const past = isBefore(day, startOfToday());
@@ -469,7 +470,7 @@ export default function App() {
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto no-scrollbar px-8 pb-32">
+        <div className="flex-1 overflow-y-auto no-scrollbar px-6 sm:px-8 pb-32">
           {/* Shift Selector */}
           <div className="flex p-1 bg-spa-card border border-white/5 rounded-[20px] mb-8 relative max-w-sm mx-auto glow-gold">
             <motion.div
@@ -491,7 +492,7 @@ export default function App() {
             <section className={cn("flex flex-col space-y-8", activeShift !== "morning" && "hidden md:flex")}>
               <div className="flex items-center gap-4">
                 <div className="h-px flex-1 bg-gradient-to-r from-transparent to-spa-accent/30" />
-                <h2 className="text-[10px] font-bold text-spa-gold uppercase tracking-[0.4em]">Sesiones Mañana</h2>
+                <h2 className="text-[11px] font-bold text-spa-gold uppercase tracking-[0.35em]">Sesiones Mañana</h2>
                 <div className="h-px flex-1 bg-gradient-to-l from-transparent to-spa-accent/30" />
               </div>
               <motion.div 
@@ -508,7 +509,7 @@ export default function App() {
             <section className={cn("flex flex-col space-y-8", activeShift !== "afternoon" && "hidden md:flex")}>
               <div className="flex items-center gap-4">
                 <div className="h-px flex-1 bg-gradient-to-r from-transparent to-spa-accent/30" />
-                <h2 className="text-[10px] font-bold text-spa-gold uppercase tracking-[0.4em]">Sesiones Tarde</h2>
+                <h2 className="text-[11px] font-bold text-spa-gold uppercase tracking-[0.35em]">Sesiones Tarde</h2>
                 <div className="h-px flex-1 bg-gradient-to-l from-transparent to-spa-accent/30" />
               </div>
               <motion.div 
@@ -590,13 +591,13 @@ export default function App() {
                                    )}
                                   >
                                     <div>
-                                      <p className="text-xs font-bold">{m.name}</p>
+                                      <p className="text-xs font-bold flex items-center gap-2"><Leaf size={12} className="text-spa-gold shrink-0" />{m.name}</p>
                                       <p className="text-[9px] opacity-60">{m.duration}</p>
                                     </div>
                                     <span className="text-xs font-bold text-spa-gold">{m.price}</span>
                                   </button>
                                   {isSelected && m.description && (
-                                    <div className="bg-spa-accent/10 border border-t-0 border-spa-gold rounded-b-xl px-3 py-2.5 text-[10px] text-[#A0A3A1] leading-relaxed">
+                                    <div className="bg-spa-accent/10 border border-t-0 border-spa-gold rounded-b-xl px-3 py-2.5 text-[10px] text-spa-crema/70 leading-relaxed">
                                       {m.description}
                                     </div>
                                   )}
@@ -701,7 +702,7 @@ export default function App() {
               className="absolute inset-0 z-[100] bg-spa-base/90 backdrop-blur-xl flex items-center justify-center p-6"
             >
               <div className="w-full max-w-2xl bg-spa-card rounded-[40px] border border-white/10 shadow-2xl h-[80vh] flex flex-col">
-                <div className="p-10 border-b border-white/5 flex justify-between items-center">
+                <div className="p-6 sm:p-10 border-b border-white/5 flex justify-between items-center">
                   <h2 className="text-3xl font-serif">Administración</h2>
                   <button
                     onClick={() => setShowAdminPanel(false)}
@@ -711,7 +712,7 @@ export default function App() {
                   </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-10 space-y-12 no-scrollbar">
+                <div className="flex-1 overflow-y-auto p-6 sm:p-10 space-y-12 no-scrollbar">
                   {/* Gestión de Horarios */}
                   <div className="space-y-8">
                     <h3 className="text-[11px] font-bold text-spa-gold uppercase tracking-[0.4em]">
@@ -821,7 +822,7 @@ export default function App() {
                               {m.duration} • {m.price}
                             </p>
                             {m.description && (
-                              <p className="text-[10px] text-[#A0A3A1] mt-1 line-clamp-2">{m.description}</p>
+                              <p className="text-[10px] text-spa-crema/70 mt-1 line-clamp-2">{m.description}</p>
                             )}
                           </div>
                           <div className="flex items-center gap-1">
@@ -952,12 +953,12 @@ export default function App() {
                           placeholder="Calle, número, ciudad..."
                           className="flex-1 h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm"
                         />
-                        <button
-                          onClick={() => handleUpdateConfig({ ...config, address: config.address })}
-                          className="px-5 h-11 rounded-xl bg-spa-gold text-spa-base text-[10px] font-bold uppercase tracking-widest hover:bg-spa-accent transition-all shrink-0"
-                        >
-                          OK
-                        </button>
+                          <button
+                            onClick={() => handleUpdateConfig({ ...config, address: config.address })}
+                            className="px-5 h-11 rounded-xl bg-spa-gold text-spa-base text-[10px] font-bold uppercase tracking-widest hover:bg-spa-accent transition-all shrink-0"
+                          >
+                            <Check size={14} className="inline mr-1" />OK
+                          </button>
                       </div>
                     </div>
 
@@ -1092,7 +1093,7 @@ export default function App() {
                                   }}
                                   className="px-2 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest bg-spa-accent/10 text-spa-gold hover:bg-spa-accent hover:text-spa-base transition-all"
                                 >
-                                  Ver
+                                  <Eye size={12} className="inline mr-1" />Ver
                                 </button>
                               </div>
                             </div>
@@ -1246,7 +1247,7 @@ export default function App() {
               className="absolute inset-0 z-[100] bg-spa-base/90 backdrop-blur-xl flex items-center justify-center p-6"
             >
               <div className="w-full max-w-2xl bg-spa-card rounded-[40px] border border-white/10 shadow-2xl max-h-[80vh] flex flex-col">
-                <div className="p-10 pb-6 border-b border-white/5 flex justify-between items-center">
+                <div className="p-6 sm:p-10 pb-6 border-b border-white/5 flex justify-between items-center">
                   <h2 className="text-3xl font-serif">Servicios</h2>
                   <button
                     onClick={() => setShowServices(false)}
@@ -1255,7 +1256,7 @@ export default function App() {
                     <X size={20} />
                   </button>
                 </div>
-                <div className="flex-1 overflow-y-auto p-10 space-y-4 no-scrollbar">
+                <div className="flex-1 overflow-y-auto p-6 sm:p-10 space-y-4 no-scrollbar">
                   {config.massageTypes.length === 0 ? (
                     <div className="bg-spa-elevated border border-white/5 rounded-2xl p-10 text-center">
                       <p className="text-sm text-[#7A7D7B]">No hay servicios disponibles</p>
@@ -1264,7 +1265,7 @@ export default function App() {
                     config.massageTypes.map((m) => (
                       <div
                         key={m.id}
-                        className="bg-spa-elevated rounded-2xl border border-white/5 p-6 flex items-center justify-between gap-6 hover:border-spa-gold/30 transition-all group"
+                        className="bg-spa-elevated rounded-2xl border border-white/5 p-6 flex items-center justify-between gap-6 hover:border-spa-gold/40 hover:shadow-[0_0_30px_rgba(201,169,110,0.08)] hover:scale-[1.01] transition-all duration-300 group"
                       >
                         <div className="flex-1">
                           <h3 className="text-lg font-serif text-spa-crema">{m.name}</h3>
@@ -1273,7 +1274,7 @@ export default function App() {
                             <span className="text-[10px] text-[#7A7D7B] uppercase tracking-widest">{m.duration}</span>
                           </div>
                           {m.description && (
-                            <p className="text-xs text-[#A0A3A1] mt-3 leading-relaxed">{m.description}</p>
+                            <p className="text-xs text-spa-crema/70 mt-3 leading-relaxed">{m.description}</p>
                           )}
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
@@ -1394,7 +1395,7 @@ export default function App() {
                     <h3 className="text-xl font-serif text-spa-crema">{infoModalMassage.name}</h3>
                     <button onClick={() => setInfoModalMassage(null)} className="p-1.5 bg-spa-elevated rounded-full hover:text-spa-gold transition-colors"><X size={18}/></button>
                   </div>
-                  <p className="text-sm text-[#A0A3A1] leading-relaxed">{infoModalMassage.description}</p>
+                  <p className="text-sm text-spa-crema/70 leading-relaxed">{infoModalMassage.description}</p>
                 </div>
               </motion.div>
             </motion.div>
@@ -1556,7 +1557,7 @@ export default function App() {
           {showSideMenu && (
             <>
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowSideMenu(false)} className="absolute inset-0 z-[60] bg-black/60 backdrop-blur-md" />
-              <motion.div initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} className="absolute right-0 top-0 bottom-0 w-80 bg-spa-card z-[70] border-l border-white/10 p-10 flex flex-col">
+              <motion.div initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} className="absolute right-0 top-0 bottom-0 w-80 bg-spa-card z-[70] border-l border-white/10 p-6 sm:p-10 flex flex-col">
                 <div className="flex justify-between items-center mb-16">
                    <span className="text-[10px] font-bold text-spa-gold uppercase tracking-[0.4em]">Menú</span>
                    <button onClick={() => setShowSideMenu(false)}><X size={24}/></button>

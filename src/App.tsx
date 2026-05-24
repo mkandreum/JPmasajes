@@ -49,6 +49,7 @@ interface AppConfig {
   logoUrl: string;
   logoPosition: { x: number; y: number };
   massageTypes: { id: string; name: string; price: string; duration: string; description: string; intensity?: string }[];
+  tagline?: string;
 }
 
 export default function App() {
@@ -62,7 +63,8 @@ export default function App() {
     massageTypes: [],
     address: "",
     logoUrl: "",
-    logoPosition: { x: 50, y: 50 }
+    logoPosition: { x: 50, y: 50 },
+    tagline: ""
   });
   
   const [selectedDate, setSelectedDate] = useState<Date>(startOfToday());
@@ -479,6 +481,7 @@ export default function App() {
               <h1 className="text-3xl md:text-4xl font-serif text-spa-crema tracking-tight">Jean Pierre</h1>
               <div className="h-0.5 w-10 bg-spa-gold mt-2 mb-1.5" />
               <p className="text-[8px] font-bold text-spa-gold uppercase tracking-[0.4em]">Massage Studio</p>
+              {config.tagline && <p className="text-[9px] text-spa-gold/70 italic mt-1.5 tracking-wide">{config.tagline}</p>}
             </div>
             {config.logoUrl && (
               <div className="w-14 h-14 md:w-16 md:h-16 rounded-full overflow-hidden border-2 border-spa-gold/30 shrink-0 bg-spa-elevated">
@@ -926,6 +929,14 @@ export default function App() {
                           >
                             <Check size={14} className="inline mr-1" />OK
                           </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-bold text-spa-gold uppercase tracking-widest px-1">Frase (Tagline)</label>
+                      <div className="flex gap-2">
+                        <input value={config.tagline || ""} onChange={e => setConfig(prev => ({ ...prev, tagline: e.target.value }))} placeholder="La energía que fluye" className="flex-1 h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm" />
+                        <button onClick={() => handleUpdateConfig({ ...config, tagline: config.tagline })} className="px-5 h-11 rounded-xl bg-spa-gold text-spa-base text-[10px] font-bold uppercase tracking-widest hover:bg-spa-accent transition-all shrink-0"><Check size={14} className="inline mr-1" />OK</button>
                       </div>
                     </div>
 

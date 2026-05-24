@@ -99,6 +99,11 @@ try {
   db.exec("ALTER TABLE config ADD COLUMN logoPosition TEXT DEFAULT '{\"x\":50,\"y\":50}'");
 } catch (e) { /* columns may already exist */ }
 
+// Migration: Add tagline column to config if it doesn't exist
+try {
+  db.exec("ALTER TABLE config ADD COLUMN tagline TEXT DEFAULT 'La energía que fluye'");
+} catch (e) { /* column may already exist */ }
+
 interface Appointment {
   id: string;
   clientName: string;
@@ -155,7 +160,8 @@ async function startServer() {
       massageTypes: row.massageTypes ? JSON.parse(row.massageTypes) : [],
       address: row.address || "",
       logoUrl: row.logoUrl || "",
-      logoPosition
+      logoPosition,
+      tagline: row.tagline || "La energía que fluye"
     };
   };
 
@@ -193,7 +199,7 @@ async function startServer() {
           <td style="background:#1a2018;padding:30px 40px;border-bottom:1px solid rgba(143,114,86,0.2);">
             <p style="margin:0;font-family:Georgia,serif;font-size:28px;color:#F9F8F6;letter-spacing:1px;">Jean Pierre</p>
             <p style="margin:4px 0 0;font-size:11px;color:#8F7256;letter-spacing:3px;text-transform:uppercase;">Massage Studio</p>
-            <p style="margin:6px 0 0;font-size:10px;color:#C9A96E;letter-spacing:2px;font-style:italic;">La energía que fluye</p>
+            <p style="margin:6px 0 0;font-size:10px;color:#C9A96E;letter-spacing:2px;font-style:italic;">${config.tagline || 'La energía que fluye'}</p>
           </td>
         </tr>
 
@@ -284,10 +290,10 @@ async function startServer() {
   });
 
   app.put("/api/app-config", (req, res) => {
-    const { bannerUrl, morningHours, afternoonHours, massageTypes, address, logoUrl, logoPosition } = req.body;
+    const { bannerUrl, morningHours, afternoonHours, massageTypes, address, logoUrl, logoPosition, tagline } = req.body;
     const current = getConfig();
     
-    db.prepare("UPDATE config SET bannerUrl = ?, morningHours = ?, afternoonHours = ?, massageTypes = ?, address = ?, logoUrl = ?, logoPosition = ? WHERE id = 1")
+    db.prepare("UPDATE config SET bannerUrl = ?, morningHours = ?, afternoonHours = ?, massageTypes = ?, address = ?, logoUrl = ?, logoPosition = ?, tagline = ? WHERE id = 1")
       .run(
         bannerUrl || current.bannerUrl,
         morningHours ? JSON.stringify(morningHours) : JSON.stringify(current.morningHours),
@@ -295,7 +301,8 @@ async function startServer() {
         massageTypes ? JSON.stringify(massageTypes) : JSON.stringify(current.massageTypes),
         address !== undefined ? address : (current.address || ""),
         logoUrl !== undefined ? logoUrl : (current.logoUrl || ""),
-        logoPosition ? JSON.stringify(logoPosition) : JSON.stringify(current.logoPosition)
+        logoPosition ? JSON.stringify(logoPosition) : JSON.stringify(current.logoPosition),
+        tagline !== undefined ? tagline : (current.tagline || "La energía que fluye")
       );
     
     res.json(getConfig());
@@ -854,7 +861,7 @@ db.prepare("INSERT INTO appointments (id, clientName, clientEmail, clientPhone, 
           <td style="background:#1a2018;padding:30px 40px;border-bottom:1px solid rgba(143,114,86,0.2);">
             <p style="margin:0;font-family:Georgia,serif;font-size:28px;color:#F9F8F6;letter-spacing:1px;">Jean Pierre</p>
             <p style="margin:4px 0 0;font-size:11px;color:#8F7256;letter-spacing:3px;text-transform:uppercase;">Massage Studio</p>
-            <p style="margin:6px 0 0;font-size:10px;color:#C9A96E;letter-spacing:2px;font-style:italic;">La energía que fluye</p>
+            <p style="margin:6px 0 0;font-size:10px;color:#C9A96E;letter-spacing:2px;font-style:italic;">${cfg.tagline || 'La energía que fluye'}</p>
           </td>
         </tr>
         <tr>

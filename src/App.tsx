@@ -1918,13 +1918,24 @@ export default function App() {
                                       <div className="flex gap-2 pt-2">
                                           <button onClick={() => { setBotData({...botData, selectedApptId: a.id!}); setBotStep("reschedule"); toast.info("Selecciona un nuevo horario disponible en el calendario"); }} className="flex-1 py-3 bg-spa-accent/10 border border-spa-accent/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-spa-gold hover:bg-spa-accent hover:text-spa-base transition-all cursor-pointer">Reagendar</button>
                                           <button onClick={async () => {
-                                              if (confirm("¿Estás seguro de cancelar?")) {
+                                              if (confirm("¿Estás seguro de cancelar esta cita?")) {
                                                   try {
-                                                      await fetch(`/api/appointments/${a.id}`, { method: "DELETE" });
-                                                      toast.success("Cita cancelada");
-                                                      setBotStep("greeting");
+                                                      const res = await fetch(`/api/bot/appointments/${a.id}/cancel`, { 
+                                                          method: "POST", 
+                                                          headers: { "Content-Type": "application/json" },
+                                                          body: JSON.stringify({ email: botData.email }) 
+                                                      });
+                                                      const data = await res.json();
+                                                      if (data.error) {
+                                                          toast.error(data.error);
+                                                      } else {
+                                                          toast.success("Cita cancelada con éxito");
+                                                          fetchAppointments();
+                                                          setBotStep("greeting");
+                                                          setShowBot(false);
+                                                      }
                                                   } catch {
-                                                      toast.error("Error al cancelar cita");
+                                                      toast.error("Error al conectar con el servidor para cancelar");
                                                   }
                                               }
                                           }} className="px-4 py-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-rose-500 hover:bg-rose-500 hover:text-white transition-all cursor-pointer"><Trash2 size={14}/></button>

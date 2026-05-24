@@ -942,6 +942,60 @@ async function startServer() {
     res.json({ ...appt, startTime: newStartTime, endTime: newEnd, status: 'rescheduled' });
   });
 
+  app.post("/api/bot/appointments/:id/cancel", async (req, res) => {
+    const { id } = req.params;
+    const { email } = req.body;
+    
+    if (!email) return res.status(400).json({ error: "Email requerido para la cancelación" });
+
+    const appt = db.prepare("SELECT * FROM appointments WHERE id = ?").get(id) as any;
+    if (!appt) return res.status(404).json({ error: "Cita no encontrada" });
+    
+    // Verify that the email matches the appointment's clientEmail
+    if (appt.clientEmail.toLowerCase() !== email.toLowerCase()) {
+      return res.status(403).json({ error: "No tienes permiso para cancelar esta cita" });
+    }
+    
+    const now = new Date();
+    if (new Date(appt.startTime) < now) {
+      return res.status(400).json({ error: "No se puede cancelar una cita pasada" });
+    }
+    
+    const tokens = getAdminTokens();
+    if (tokens && appt.eventId) {
+      try {
+        oauth2Client.setCredentials(tokens);
+        await calendar.events.delete({ calendarId: "primary", eventId: appt.eventId });
+        
+        const dateStr = new Date(appt.startTime).toLocaleString('es-ES', { 
+          weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid'
+        });
+        const html = getHtmlTemplate(
+          "Cita Cancelada",
+          `<p>Tu cita ha sido cancelada con éxito a través de nuestro asistente virtual.</p>`,
+          appt.clientName,
+          dateStr
+        );
+        await sendEmail(appt.clientEmail, "Cita Cancelada - Jean Pierre", html);
+        
+        const adminEmail = getAdminEmail();
+        if (adminEmail) {
+          const adminHtml = getHtmlTemplate(
+            "Cita Cancelada",
+            `<p>La cita de <span style="color: #F9F8F6;">${escapeHtml(appt.clientName)}</span> ha sido cancelada por el cliente a través del asistente virtual.</p>
+             <p>Horario cancelado: ${dateStr}<br>Email: ${escapeHtml(appt.clientEmail)}</p>`,
+            "Jean Pierre",
+            dateStr
+          );
+          await sendEmail(adminEmail, `Cita Cancelada: ${appt.clientName}`, adminHtml);
+        }
+      } catch (e) { console.error(e); }
+    }
+    
+    db.prepare("DELETE FROM appointments WHERE id = ?").run(id);
+    res.json({ success: true });
+  });
+
   // AI Chat Route
   app.post("/api/chat", async (req, res) => {
      try {

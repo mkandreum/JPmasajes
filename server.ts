@@ -297,7 +297,8 @@ async function startServer() {
       logoPosition,
       tagline: row.tagline || "La energía que fluye",
       blockedDays,
-      blockedShifts
+      blockedShifts,
+      phone: row.phone || "34623101111"
     };
   };
 

@@ -787,7 +787,14 @@ async function startServer() {
         break;
       case "address":
         subject = "Dirección del Estudio - Jean Pierre";
-        content = `<p>Tu cita está a punto de comenzar. Aquí tienes la dirección de nuestro estudio para que puedas llegar sin problemas:</p><div style="background:rgba(143,114,86,0.1);padding:15px 20px;border-radius:10px;border:1px solid rgba(143,114,86,0.2);margin:15px 0;"><p style="margin:0;font-size:16px;color:#F9F8F6;">${escapeHtml(cfg.address)}</p></div><p>Te esperamos para brindarte una experiencia única.</p>`;
+        content = `<p>Tu cita está a punto de comenzar. Aquí tienes la dirección de nuestro estudio para que puedas llegar sin problemas:</p>
+            <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cfg.address)}" target="_blank" style="text-decoration:none;">
+              <div style="background:#1E2520;border:1px solid rgba(143,114,86,0.15);border-radius:12px;padding:24px;margin:25px 0;text-align:center;">
+                <p style="margin:0;font-size:16px;color:#F9F8F6;font-weight:500;line-height:1.6;">${escapeHtml(cfg.address)}</p>
+                <p style="margin:8px 0 0;font-size:11px;color:#3B82F6;letter-spacing:1px;">📌 Ver en Google Maps →</p>
+              </div>
+            </a>
+            <p style="font-size:14px;color:#A0A3A1;line-height:1.6;">Te esperamos para brindarte una experiencia única.</p>`;
         break;
       default:
         subject = "Mensaje de tu Terapeuta - Jean Pierre";

@@ -87,6 +87,12 @@ try {
   db.exec("ALTER TABLE appointments ADD COLUMN addressSent INTEGER DEFAULT 0");
 } catch (e) { /* column may already exist */ }
 
+// Migration: Add logo columns to config if they don't exist
+try {
+  db.exec("ALTER TABLE config ADD COLUMN logoUrl TEXT");
+  db.exec("ALTER TABLE config ADD COLUMN logoPosition TEXT DEFAULT '{\"x\":50,\"y\":50}'");
+} catch (e) { /* columns may already exist */ }
+
 interface Appointment {
   id: string;
   clientName: string;
@@ -134,12 +140,16 @@ async function startServer() {
   // Helper to get config
   const getConfig = () => {
     const row = db.prepare("SELECT * FROM config WHERE id = 1").get() as any;
+    let logoPosition = { x: 50, y: 50 };
+    try { logoPosition = JSON.parse(row.logoPosition || '{"x":50,"y":50}'); } catch (e) {}
     return {
       bannerUrl: row.bannerUrl,
       morningHours: JSON.parse(row.morningHours),
       afternoonHours: JSON.parse(row.afternoonHours),
       massageTypes: row.massageTypes ? JSON.parse(row.massageTypes) : [],
-      address: row.address || ""
+      address: row.address || "",
+      logoUrl: row.logoUrl || "",
+      logoPosition
     };
   };
 
@@ -267,16 +277,18 @@ async function startServer() {
   });
 
   app.put("/api/app-config", (req, res) => {
-    const { bannerUrl, morningHours, afternoonHours, massageTypes, address } = req.body;
+    const { bannerUrl, morningHours, afternoonHours, massageTypes, address, logoUrl, logoPosition } = req.body;
     const current = getConfig();
     
-    db.prepare("UPDATE config SET bannerUrl = ?, morningHours = ?, afternoonHours = ?, massageTypes = ?, address = ? WHERE id = 1")
+    db.prepare("UPDATE config SET bannerUrl = ?, morningHours = ?, afternoonHours = ?, massageTypes = ?, address = ?, logoUrl = ?, logoPosition = ? WHERE id = 1")
       .run(
         bannerUrl || current.bannerUrl,
         morningHours ? JSON.stringify(morningHours) : JSON.stringify(current.morningHours),
         afternoonHours ? JSON.stringify(afternoonHours) : JSON.stringify(current.afternoonHours),
         massageTypes ? JSON.stringify(massageTypes) : JSON.stringify(current.massageTypes),
-        address !== undefined ? address : (current.address || "")
+        address !== undefined ? address : (current.address || ""),
+        logoUrl !== undefined ? logoUrl : (current.logoUrl || ""),
+        logoPosition ? JSON.stringify(logoPosition) : JSON.stringify(current.logoPosition)
       );
     
     res.json(getConfig());

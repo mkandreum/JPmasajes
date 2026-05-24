@@ -27,6 +27,8 @@ interface AppConfig {
   morningHours: string[];
   afternoonHours: string[];
   address: string;
+  logoUrl: string;
+  logoPosition: { x: number; y: number };
   massageTypes: { id: string; name: string; price: string; duration: string; description: string }[];
 }
 
@@ -39,7 +41,9 @@ export default function App() {
     morningHours: [],
     afternoonHours: [],
     massageTypes: [],
-    address: ""
+    address: "",
+    logoUrl: "",
+    logoPosition: { x: 50, y: 50 }
   });
   
   const [selectedDate, setSelectedDate] = useState<Date>(startOfToday());
@@ -421,6 +425,16 @@ export default function App() {
               <div className="h-0.5 w-10 bg-spa-gold mt-2 mb-1.5" />
               <p className="text-[8px] font-bold text-spa-gold uppercase tracking-[0.4em]">Massage Studio</p>
             </div>
+            {config.logoUrl && (
+              <div className="w-14 h-14 md:w-16 md:h-16 rounded-full overflow-hidden border-2 border-spa-gold/30 shrink-0 bg-spa-elevated">
+                <img
+                  src={config.logoUrl}
+                  alt="Logo"
+                  className="w-full h-full object-cover"
+                  style={{ objectPosition: `${config.logoPosition.x}% ${config.logoPosition.y}%` }}
+                />
+              </div>
+            )}
           </div>
         </div>
 
@@ -944,6 +958,77 @@ export default function App() {
                         >
                           OK
                         </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-bold text-spa-gold uppercase tracking-widest px-1">Logo del Estudio</label>
+                      <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-spa-gold/30 shrink-0 bg-spa-elevated flex items-center justify-center">
+                          {config.logoUrl ? (
+                            <img
+                              src={config.logoUrl}
+                              alt="Logo"
+                              className="w-full h-full object-cover"
+                              style={{ objectPosition: `${config.logoPosition.x}% ${config.logoPosition.y}%` }}
+                            />
+                          ) : (
+                            <span className="text-[9px] text-[#7A7D7B] uppercase tracking-widest">Logo</span>
+                          )}
+                        </div>
+                        <div className="flex-1 space-y-2">
+                          <label className="block w-full cursor-pointer">
+                            <span className="w-full flex items-center justify-center py-3 rounded-xl bg-spa-elevated border border-white/5 text-spa-gold font-bold uppercase text-[9px] tracking-widest hover:border-spa-gold transition-all">
+                              Subir logo
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) {
+                                  const r = new FileReader();
+                                  r.onload = (ev) =>
+                                    handleUpdateConfig({
+                                      ...config,
+                                      logoUrl: ev.target?.result as string,
+                                    });
+                                  r.readAsDataURL(f);
+                                }
+                              }}
+                            />
+                          </label>
+                          {config.logoUrl && (
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => handleUpdateConfig({ ...config, logoPosition: { x: Math.max(0, config.logoPosition.x - 5), y: config.logoPosition.y } })}
+                                className="p-1.5 bg-spa-elevated rounded-lg hover:text-spa-gold transition-colors text-[#7A7D7B]"
+                                title="Mover izquierda"
+                              >←</button>
+                              <button
+                                onClick={() => handleUpdateConfig({ ...config, logoPosition: { x: config.logoPosition.x, y: Math.max(0, config.logoPosition.y - 5) } })}
+                                className="p-1.5 bg-spa-elevated rounded-lg hover:text-spa-gold transition-colors text-[#7A7D7B]"
+                                title="Mover arriba"
+                              >↑</button>
+                              <button
+                                onClick={() => handleUpdateConfig({ ...config, logoPosition: { x: config.logoPosition.x, y: Math.min(100, config.logoPosition.y + 5) } })}
+                                className="p-1.5 bg-spa-elevated rounded-lg hover:text-spa-gold transition-colors text-[#7A7D7B]"
+                                title="Mover abajo"
+                              >↓</button>
+                              <button
+                                onClick={() => handleUpdateConfig({ ...config, logoPosition: { x: Math.min(100, config.logoPosition.x + 5), y: config.logoPosition.y } })}
+                                className="p-1.5 bg-spa-elevated rounded-lg hover:text-spa-gold transition-colors text-[#7A7D7B]"
+                                title="Mover derecha"
+                              >→</button>
+                              <button
+                                onClick={() => handleUpdateConfig({ ...config, logoUrl: "", logoPosition: { x: 50, y: 50 } })}
+                                className="p-1.5 bg-rose-500/10 rounded-lg hover:bg-rose-500/30 text-rose-500 transition-colors ml-1"
+                                title="Eliminar logo"
+                              >✕</button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>

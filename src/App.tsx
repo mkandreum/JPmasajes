@@ -1672,162 +1672,200 @@ export default function App() {
 
           {/* Bot Interface */}
           {showBot && (
-             <motion.div initial={{ opacity: 0, y: 20, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.95 }} className="fixed bottom-24 right-6 w-[calc(100vw-48px)] max-w-[350px] h-[500px] max-h-[70vh] bg-spa-card border border-white/10 rounded-[28px] shadow-2xl flex flex-col z-50 overflow-hidden glow-gold">
-                <div className="p-5 border-b border-white/5 flex items-center justify-between bg-spa-elevated">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-spa-gold to-spa-accent flex items-center justify-center text-spa-base font-serif text-lg font-bold">JP</div>
-                        <div>
-                           <h3 className="text-xs font-bold uppercase tracking-widest">Asistente</h3>
-                           <p className="text-[9px] text-spa-gold font-medium">Agente IA</p>
-                        </div>
+            <>
+              {/* Standard Floating Assistant (Hidden during rescheduling step to allow full viewport access) */}
+              {botStep !== "reschedule" && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 20, scale: 0.95 }} 
+                  animate={{ opacity: 1, y: 0, scale: 1 }} 
+                  exit={{ opacity: 0, y: 20, scale: 0.95 }} 
+                  className="fixed bottom-24 right-6 w-[calc(100vw-48px)] max-w-[350px] h-[500px] max-h-[70vh] bg-spa-card border border-white/10 rounded-[28px] shadow-2xl flex flex-col z-50 overflow-hidden glow-gold"
+                >
+                  <div className="p-5 border-b border-white/5 flex items-center justify-between bg-spa-elevated">
+                      <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-spa-gold to-spa-accent flex items-center justify-center text-spa-base font-serif text-lg font-bold">JP</div>
+                          <div>
+                             <h3 className="text-xs font-bold uppercase tracking-widest">Asistente</h3>
+                             <p className="text-[9px] text-spa-gold font-medium">Agente IA</p>
+                          </div>
+                      </div>
+                      <button onClick={()=>setShowBot(false)} className="p-2 text-[#7A7D7B] hover:text-spa-crema"><X size={18}/></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar">
+                      <div className="self-start max-w-[85%] bg-spa-elevated p-5 rounded-2xl rounded-tl-sm text-sm font-light leading-relaxed border border-white/5 relative">
+                          Bienvenido. Soy el asistente de Jean Pierre. ¿Cómo puedo ayudarte con tu reserva hoy?
+                          <div className="absolute top-0 -left-2 w-4 h-4 bg-spa-elevated clip-path-triangle" />
+                      </div>
+                      {botStep === "greeting" && (
+                          <div className="flex flex-col gap-3">
+                              <button onClick={() => setBotStep("ask_email")} className="w-full py-4 bg-spa-accent text-spa-crema rounded-2xl text-[10px] font-bold uppercase tracking-widest hover:bg-spa-gold hover:text-spa-base transition-all shadow-lg">Consultar / Cancelar Cita</button>
+                              <button onClick={() => { setShowBot(false); toast.info("Selecciona un día y hora en el calendario"); }} className="w-full py-4 bg-spa-elevated border border-white/5 text-spa-crema rounded-2xl text-[10px] font-bold uppercase tracking-widest hover:border-spa-gold transition-all">Nueva Reserva</button>
+                          </div>
+                      )}
+
+                      {botStep === "ask_email" && (
+                          <div className="space-y-4">
+                              <p className="text-[10px] text-spa-gold font-bold uppercase tracking-widest px-2">Introduce tu Email</p>
+                              <div className="relative">
+                                  <input 
+                                      type="email" autoFocus
+                                      id="bot-email-input"
+                                      className="w-full h-14 bg-spa-elevated border border-white/5 rounded-2xl px-5 pr-14 outline-none focus:border-spa-gold transition-all text-sm"
+                                      placeholder="ejemplo@correo.com"
+                                      onKeyDown={(e) => {
+                                          if (e.key === "Enter") {
+                                              const val = (e.target as HTMLInputElement).value;
+                                              if (val) {
+                                                  setBotData({...botData, email: val});
+                                                  setBotStep("ask_verification");
+                                              }
+                                          }
+                                      }}
+                                  />
+                                  <button 
+                                      onClick={() => {
+                                          const el = document.getElementById("bot-email-input") as HTMLInputElement;
+                                          if (el.value) {
+                                              setBotData({...botData, email: el.value});
+                                              setBotStep("ask_verification");
+                                          }
+                                      }}
+                                      className="absolute right-2 top-2 w-10 h-10 bg-spa-accent rounded-xl flex items-center justify-center text-spa-crema hover:bg-spa-gold transition-all"
+                                  >
+                                      <Send size={16} />
+                                  </button>
+                              </div>
+                              <button onClick={() => setBotStep("greeting")} className="text-[9px] text-[#7A7D7B] uppercase font-bold hover:text-spa-crema px-2">← Volver</button>
+                          </div>
+                      )}
+
+                      {botStep === "ask_verification" && (
+                          <div className="space-y-4">
+                              <p className="text-[10px] text-spa-gold font-bold uppercase tracking-widest px-2">Verificación (Nombre o Teléfono)</p>
+                              <div className="relative">
+                                  <input 
+                                      type="text" autoFocus
+                                      id="bot-verify-input"
+                                      className="w-full h-14 bg-spa-elevated border border-white/5 rounded-2xl px-5 pr-14 outline-none focus:border-spa-gold transition-all text-sm"
+                                      placeholder="Tu nombre o teléfono..."
+                                      onKeyDown={async (e) => {
+                                          if (e.key === "Enter") {
+                                              handleBotVerify((e.target as HTMLInputElement).value);
+                                          }
+                                      }}
+                                  />
+                                  <button 
+                                      onClick={() => {
+                                          const el = document.getElementById("bot-verify-input") as HTMLInputElement;
+                                          handleBotVerify(el.value);
+                                      }}
+                                      className="absolute right-2 top-2 w-10 h-10 bg-spa-accent rounded-xl flex items-center justify-center text-spa-crema hover:bg-spa-gold transition-all"
+                                  >
+                                      <Send size={16} />
+                                  </button>
+                              </div>
+                              <button onClick={() => setBotStep("ask_email")} className="text-[9px] text-[#7A7D7B] uppercase font-bold hover:text-spa-crema px-2">← Cambiar Email</button>
+                          </div>
+                      )}
+
+                      {botStep === "show_appointments" && (
+                          <div className="space-y-4">
+                              <p className="text-[10px] text-spa-gold font-bold uppercase tracking-widest px-2">Tus Próximas Citas</p>
+                              {botData.appts.map(a => (
+                                  <div key={a.id} className="bg-spa-elevated p-5 rounded-2xl border border-white/5 space-y-4">
+                                      <div className="flex justify-between items-start">
+                                          <div>
+                                              <p className="text-xs font-serif text-spa-crema">{format(parseISO(a.startTime), "EEEE d 'de' MMMM", { locale: es })}</p>
+                                              <p className="text-[10px] text-spa-gold font-bold uppercase tracking-widest mt-1">{format(parseISO(a.startTime), "HH:mm")}</p>
+                                          </div>
+                                          <div className="px-2 py-1 bg-spa-accent/10 border border-spa-accent/20 rounded-md text-[8px] font-bold text-spa-gold uppercase tracking-tighter">Confirmada</div>
+                                      </div>
+                                      <div className="flex gap-2 pt-2">
+                                          <button onClick={() => { setBotData({...botData, selectedApptId: a.id!}); setBotStep("reschedule"); toast.info("Selecciona un nuevo horario disponible en el calendario"); }} className="flex-1 py-3 bg-spa-accent/10 border border-spa-accent/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-spa-gold hover:bg-spa-accent hover:text-spa-base transition-all">Reagendar</button>
+                                          <button onClick={async () => {
+                                              if (confirm("¿Estás seguro de cancelar?")) {
+                                                  try {
+                                                      await fetch(`/api/appointments/${a.id}`, { method: "DELETE" });
+                                                      toast.success("Cita cancelada");
+                                                      setBotStep("greeting");
+                                                  } catch {
+                                                      toast.error("Error al cancelar cita");
+                                                  }
+                                              }
+                                          }} className="px-4 py-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-rose-500 hover:bg-rose-500 hover:text-white transition-all"><Trash2 size={14}/></button>
+                                      </div>
+                                  </div>
+                              ))}
+                              <button onClick={() => setBotStep("greeting")} className="w-full py-3 bg-white/5 rounded-xl text-[9px] font-bold uppercase tracking-widest text-[#7A7D7B] hover:text-spa-crema transition-all">Finalizar</button>
+                          </div>
+                      )}
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Premium Bottom Docked Rescheduling Bar (Replaces overlay during reschedule step for zero-friction mobile UX) */}
+              {botStep === "reschedule" && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 100 }} 
+                  animate={{ opacity: 1, y: 0 }} 
+                  exit={{ opacity: 0, y: 100 }} 
+                  className="fixed bottom-0 left-0 right-0 w-full bg-spa-card/95 backdrop-blur-xl border-t border-white/10 p-6 z-50 flex flex-col md:flex-row items-center justify-between gap-4 shadow-[0_-10px_30px_rgba(0,0,0,0.6)]"
+                >
+                  <div className="flex items-center gap-4 w-full md:w-auto">
+                    <div className="w-12 h-12 rounded-2xl bg-spa-accent/20 border border-spa-accent/40 flex items-center justify-center text-spa-gold shrink-0">
+                      <CalendarIcon size={22} />
                     </div>
-                    <button onClick={()=>setShowBot(false)} className="p-2 text-[#7A7D7B] hover:text-spa-crema"><X size={18}/></button>
-                </div>
-                <div className="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar">
-                    <div className="self-start max-w-[85%] bg-spa-elevated p-5 rounded-2xl rounded-tl-sm text-sm font-light leading-relaxed border border-white/5 relative">
-                        Bienvenido. Soy el asistente de Jean Pierre. ¿Cómo puedo ayudarte con tu reserva hoy?
-                        <div className="absolute top-0 -left-2 w-4 h-4 bg-spa-elevated clip-path-triangle" />
+                    <div className="text-left">
+                      <h4 className="text-xs font-bold text-spa-gold uppercase tracking-[0.2em] mb-0.5">Reagendando tu cita</h4>
+                      {botRescheduleSlot ? (
+                        <p className="text-sm text-spa-crema font-medium font-serif">
+                          Nuevo horario: <strong className="text-spa-gold">{format(botRescheduleSlot, "EEEE d 'de' MMMM, HH:mm", { locale: es })}</strong>
+                        </p>
+                      ) : (
+                        <p className="text-xs text-[#7A7D7B]">
+                          Pulsa una hora disponible en el calendario para seleccionarla.
+                        </p>
+                      )}
                     </div>
-                    {botStep === "greeting" && (
-                        <div className="flex flex-col gap-3">
-                            <button onClick={() => setBotStep("ask_email")} className="w-full py-4 bg-spa-accent text-spa-crema rounded-2xl text-[10px] font-bold uppercase tracking-widest hover:bg-spa-gold hover:text-spa-base transition-all shadow-lg">Consultar / Cancelar Cita</button>
-                            <button onClick={() => { setShowBot(false); toast.info("Selecciona un día y hora en el calendario"); }} className="w-full py-4 bg-spa-elevated border border-white/5 text-spa-crema rounded-2xl text-[10px] font-bold uppercase tracking-widest hover:border-spa-gold transition-all">Nueva Reserva</button>
-                        </div>
-                    )}
+                  </div>
 
-                    {botStep === "ask_email" && (
-                        <div className="space-y-4">
-                            <p className="text-[10px] text-spa-gold font-bold uppercase tracking-widest px-2">Introduce tu Email</p>
-                            <div className="relative">
-                                <input 
-                                    type="email" autoFocus
-                                    id="bot-email-input"
-                                    className="w-full h-14 bg-spa-elevated border border-white/5 rounded-2xl px-5 pr-14 outline-none focus:border-spa-gold transition-all text-sm"
-                                    placeholder="ejemplo@correo.com"
-                                    onKeyDown={(e) => {
-                                        if (e.key === "Enter") {
-                                            const val = (e.target as HTMLInputElement).value;
-                                            if (val) {
-                                                setBotData({...botData, email: val});
-                                                setBotStep("ask_verification");
-                                            }
-                                        }
-                                    }}
-                                />
-                                <button 
-                                    onClick={() => {
-                                        const el = document.getElementById("bot-email-input") as HTMLInputElement;
-                                        if (el.value) {
-                                            setBotData({...botData, email: el.value});
-                                            setBotStep("ask_verification");
-                                        }
-                                    }}
-                                    className="absolute right-2 top-2 w-10 h-10 bg-spa-accent rounded-xl flex items-center justify-center text-spa-crema hover:bg-spa-gold transition-all"
-                                >
-                                    <Send size={16} />
-                                </button>
-                            </div>
-                            <button onClick={() => setBotStep("greeting")} className="text-[9px] text-[#7A7D7B] uppercase font-bold hover:text-spa-crema px-2">← Volver</button>
-                        </div>
+                  <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                    <button 
+                      onClick={() => {
+                        setBotStep("show_appointments");
+                        setBotRescheduleSlot(null);
+                      }} 
+                      className="px-5 py-3 rounded-xl border border-white/10 text-[9px] font-bold uppercase tracking-widest text-[#7A7D7B] hover:text-spa-crema hover:border-white/20 transition-all cursor-pointer"
+                    >
+                      Atrás
+                    </button>
+                    {botRescheduleSlot && (
+                      <button 
+                        onClick={async () => {
+                          try {
+                            await fetch(`/api/bot/appointments/${botData.selectedApptId}/reschedule`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ newStartTime: botRescheduleSlot.toISOString() })
+                            });
+                            toast.success("Cita reprogramada con éxito");
+                            fetchAppointments();
+                            setBotStep("greeting");
+                            setShowBot(false);
+                            setBotRescheduleSlot(null);
+                          } catch {
+                            toast.error("Error al reprogramar cita");
+                          }
+                        }} 
+                        className="px-6 py-3 bg-spa-gold text-spa-base rounded-xl text-[9px] font-bold uppercase tracking-widest hover:bg-spa-gold/80 transition-all font-semibold shadow-lg shadow-spa-gold/10 cursor-pointer"
+                      >
+                        Confirmar Cambio
+                      </button>
                     )}
-
-                    {botStep === "ask_verification" && (
-                        <div className="space-y-4">
-                            <p className="text-[10px] text-spa-gold font-bold uppercase tracking-widest px-2">Verificación (Nombre o Teléfono)</p>
-                            <div className="relative">
-                                <input 
-                                    type="text" autoFocus
-                                    id="bot-verify-input"
-                                    className="w-full h-14 bg-spa-elevated border border-white/5 rounded-2xl px-5 pr-14 outline-none focus:border-spa-gold transition-all text-sm"
-                                    placeholder="Tu nombre o teléfono..."
-                                    onKeyDown={async (e) => {
-                                        if (e.key === "Enter") {
-                                            handleBotVerify((e.target as HTMLInputElement).value);
-                                        }
-                                    }}
-                                />
-                                <button 
-                                    onClick={() => {
-                                        const el = document.getElementById("bot-verify-input") as HTMLInputElement;
-                                        handleBotVerify(el.value);
-                                    }}
-                                    className="absolute right-2 top-2 w-10 h-10 bg-spa-accent rounded-xl flex items-center justify-center text-spa-crema hover:bg-spa-gold transition-all"
-                                >
-                                    <Send size={16} />
-                                </button>
-                            </div>
-                            <button onClick={() => setBotStep("ask_email")} className="text-[9px] text-[#7A7D7B] uppercase font-bold hover:text-spa-crema px-2">← Cambiar Email</button>
-                        </div>
-                    )}
-
-                    {botStep === "show_appointments" && (
-                        <div className="space-y-4">
-                            <p className="text-[10px] text-spa-gold font-bold uppercase tracking-widest px-2">Tus Próximas Citas</p>
-                            {botData.appts.map(a => (
-                                <div key={a.id} className="bg-spa-elevated p-5 rounded-2xl border border-white/5 space-y-4">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <p className="text-xs font-serif text-spa-crema">{format(parseISO(a.startTime), "EEEE d 'de' MMMM", { locale: es })}</p>
-                                            <p className="text-[10px] text-spa-gold font-bold uppercase tracking-widest mt-1">{format(parseISO(a.startTime), "HH:mm")}</p>
-                                        </div>
-                                        <div className="px-2 py-1 bg-spa-accent/10 border border-spa-accent/20 rounded-md text-[8px] font-bold text-spa-gold uppercase tracking-tighter">Confirmada</div>
-                                    </div>
-                                    <div className="flex gap-2 pt-2">
-                                        <button onClick={() => { setBotData({...botData, selectedApptId: a.id!}); setBotStep("reschedule"); }} className="flex-1 py-3 bg-spa-accent/10 border border-spa-accent/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-spa-gold hover:bg-spa-accent hover:text-spa-base transition-all">Reagendar</button>
-                                        <button onClick={async () => {
-                                            if (confirm("¿Estás seguro de cancelar?")) {
-                                                try {
-                                                    await fetch(`/api/appointments/${a.id}`, { method: "DELETE" });
-                                                    toast.success("Cita cancelada");
-                                                    setBotStep("greeting");
-                                                } catch {
-                                                    toast.error("Error al cancelar cita");
-                                                }
-                                            }
-                                        }} className="px-4 py-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-rose-500 hover:bg-rose-500 hover:text-white transition-all"><Trash2 size={14}/></button>
-                                    </div>
-                                </div>
-                            ))}
-                            <button onClick={() => setBotStep("greeting")} className="w-full py-3 bg-white/5 rounded-xl text-[9px] font-bold uppercase tracking-widest text-[#7A7D7B] hover:text-spa-crema transition-all">Finalizar</button>
-                        </div>
-                    )}
-
-                    {botStep === "reschedule" && (
-                        <div className="space-y-4 text-center">
-                            <p className="text-[10px] text-spa-gold font-bold uppercase tracking-widest">Selecciona Nuevo Horario</p>
-                            <p className="text-xs text-[#7A7D7B]">Pulsa una hora disponible en el calendario principal y luego confirma aquí.</p>
-                            
-                            {botRescheduleSlot ? (
-                                <div className="bg-spa-accent/10 p-5 rounded-2xl border border-spa-accent/30 space-y-4">
-                                    <p className="text-xs font-serif text-spa-crema">Nuevo Horario:</p>
-                                    <p className="text-lg font-serif text-spa-gold">{format(botRescheduleSlot, "EEEE d 'de' MMMM, HH:mm", { locale: es })}</p>
-                                    <button onClick={async () => {
-                                        try {
-                                            await fetch(`/api/bot/appointments/${botData.selectedApptId}/reschedule`, {
-                                                method: "POST",
-                                                headers: { "Content-Type": "application/json" },
-                                                body: JSON.stringify({ newStartTime: botRescheduleSlot.toISOString() })
-                                            });
-                                            toast.success("Cita reprogramada");
-                                            fetchAppointments();
-                                            setBotStep("greeting");
-                                            setBotRescheduleSlot(null);
-                                        } catch {
-                                            toast.error("Error al reprogramar cita");
-                                        }
-                                    }} className="w-full py-4 bg-spa-gold text-spa-base rounded-2xl text-[10px] font-bold uppercase tracking-widest shadow-xl">Confirmar Cambio</button>
-                                </div>
-                            ) : (
-                                <div className="py-10 border-2 border-dashed border-white/5 rounded-2xl flex flex-col items-center gap-3">
-                                    <CalendarIcon className="text-[#7A7D7B] opacity-30" size={32} />
-                                    <p className="text-[10px] text-[#7A7D7B] uppercase font-bold tracking-widest">Esperando selección...</p>
-                                </div>
-                            )}
-                            <button onClick={() => setBotStep("show_appointments")} className="text-[9px] text-[#7A7D7B] uppercase font-bold hover:text-spa-crema">← Cancelar</button>
-                        </div>
-                    )}
-                </div>
-             </motion.div>
+                  </div>
+                </motion.div>
+              )}
+            </>
           )}
 
           {/* Side Menu */}

@@ -1369,7 +1369,14 @@ export default function App() {
                 </div>
                 <div className="space-y-4">
                   <div className="flex items-center gap-2">
-                    <select value={emailTemplate} onChange={e => setEmailTemplate(e.target.value)} className="flex-1 h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm">
+                    <select value={emailTemplate} onChange={e => {
+                      const val = e.target.value;
+                      setEmailTemplate(val);
+                      if (val === "custom" && emailAppointment) {
+                        setEmailCustomText(`Te escribo para informarte sobre tu cita de ${emailAppointment.massageType || 'masaje'} el ${format(parseISO(emailAppointment.startTime), "EEEE d 'de' MMMM", { locale: es })} a las ${format(parseISO(emailAppointment.startTime), "HH:mm")}.${emailAppointment.duration ? ` Duración: ${emailAppointment.duration}.` : ''}\n\nPor favor, confirma que podrás asistir o avísanos si necesitas cambiar algo.`);
+                        setShowEmailCustomInput(true);
+                      }
+                    }} className="flex-1 h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm">
                       <option value="reminder">Recordatorio de Cita</option>
                       <option value="address">Dirección del Estudio</option>
                       <option value="custom">Personalizado</option>
@@ -1379,7 +1386,7 @@ export default function App() {
                     </button>
                   </div>
                   {showEmailCustomInput && (
-                    <textarea value={emailCustomText} onChange={e => setEmailCustomText(e.target.value)} placeholder="Escribe un mensaje adicional para el cliente..." rows={4} className="w-full bg-spa-elevated border border-white/5 rounded-xl px-4 py-3 outline-none focus:border-spa-gold text-sm resize-none" />
+                    <textarea value={emailCustomText} onChange={e => setEmailCustomText(e.target.value)} placeholder="Escribe un mensaje adicional para el cliente..." rows={5} className="w-full bg-spa-elevated border border-white/5 rounded-xl px-4 py-3 outline-none focus:border-spa-gold text-sm resize-none" />
                   )}
                   <button onClick={handleSendCustomEmail} className="w-full h-12 bg-spa-gold text-spa-base font-bold uppercase tracking-[0.2em] rounded-xl hover:opacity-90 active:scale-95 transition-all text-xs shadow-xl">
                     Enviar Correo

@@ -19,9 +19,13 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS config (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     bannerUrl TEXT,
-    morningHours TEXT, -- JSON array of hours "HH:mm"
-    afternoonHours TEXT, -- JSON array of hours "HH:mm"
-    massageTypes TEXT -- JSON array of objects
+    morningHours TEXT,
+    afternoonHours TEXT,
+    massageTypes TEXT,
+    address TEXT DEFAULT '',
+    logoUrl TEXT DEFAULT '',
+    logoPosition TEXT DEFAULT '{"x":50,"y":50}',
+    tagline TEXT DEFAULT 'La energía que fluye'
   );
 
   CREATE TABLE IF NOT EXISTS appointments (
@@ -35,7 +39,10 @@ db.exec(`
     eventId TEXT,
     massageType TEXT,
     price TEXT,
-    duration TEXT
+    duration TEXT,
+    addressSent INTEGER DEFAULT 0,
+    reminder6hSent INTEGER DEFAULT 0,
+    reminder2hSent INTEGER DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS admin_auth (

@@ -89,6 +89,9 @@ export default function App() {
   const [infoModalMassage, setInfoModalMassage] = useState<{ name: string; description: string } | null>(null);
   const [editMassageId, setEditMassageId] = useState<string | null>(null);
   const [showServiciosEditModal, setShowServiciosEditModal] = useState(false);
+  const [showClientsPage, setShowClientsPage] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(startOfToday());
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState<Date | null>(null);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailAppointment, setEmailAppointment] = useState<Appointment | null>(null);
   const [emailTemplate, setEmailTemplate] = useState("reminder");
@@ -998,221 +1001,189 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Próximas Citas */}
-                  <div className="space-y-6">
-                    <h3 className="text-[11px] font-bold text-spa-gold uppercase tracking-[0.4em]">
-                      Próximas Citas
-                    </h3>
-
-                    {appointments
-                      .filter((a) => isAfter(parseISO(a.startTime), new Date()))
-                      .sort(
-                        (a, b) =>
-                          parseISO(a.startTime).getTime() - parseISO(b.startTime).getTime()
-                      ).length === 0 ? (
-                      <div className="bg-spa-elevated border border-white/5 rounded-2xl p-6 text-center">
-                        <p className="text-sm text-[#7A7D7B]">Sin citas próximas</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {appointments
-                          .filter((a) => isAfter(parseISO(a.startTime), new Date()))
-                          .sort(
-                            (a, b) =>
-                              parseISO(a.startTime).getTime() - parseISO(b.startTime).getTime()
-                          )
-                          .map((appt) => (
-                            <div
-                              key={appt.id}
-                              className="bg-spa-elevated px-4 py-4 rounded-xl border border-white/5 flex items-center justify-between gap-4"
-                            >
-                              <div>
-                                <p className="text-sm font-medium flex items-center gap-2">{appt.clientName}
-                                  <span className={`px-1.5 py-0.5 rounded-md text-[7px] font-bold uppercase tracking-wider border ${getStatusInfo(appt.status).className}`}>{getStatusInfo(appt.status).label}</span>
-                                </p>
-                                <p className="text-[10px] text-[#7A7D7B] mt-1">
-                                  {format(parseISO(appt.startTime), "d MMM, HH:mm", {
-                                    locale: es,
-                                  })}
-                                </p>
-                              </div>
-
-                              <div className="flex items-center gap-1">
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setEmailAppointment(appt); setShowEmailModal(true); }}
-                                  className="px-2 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white transition-all"
-                                  title="Enviar correo"
-                                >
-                                  <Mail size={12} className="inline mr-1" />Email
-                                </button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleAddToCalendar(appt); }}
-                                  className="px-2 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all"
-                                  title="Añadir al calendario"
-                                >
-                                  <CalendarIcon size={12} className="inline mr-1" />Cal
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setViewingAppt(appt);
-                                    setShowAdminPanel(false);
-                                  }}
-                                  className="px-2 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest bg-spa-accent/10 text-spa-gold hover:bg-spa-accent hover:text-spa-base transition-all"
-                                >
-                                  <Eye size={12} className="inline mr-1" />Ver
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Historial e Ingresos */}
-                  <div className="space-y-6">
-                    <h3 className="text-[11px] font-bold text-spa-gold uppercase tracking-[0.4em]">
-                      Historial e Ingresos
-                    </h3>
-
-                    {(() => {
-                      const allAppointments = [...appointments].sort(
-                        (a, b) =>
-                          parseISO(a.startTime).getTime() - parseISO(b.startTime).getTime()
-                      );
-
-                      const getPrice = (appt: any) => {
-                        if (appt.price) {
-                          const num = parseFloat(appt.price.replace(/[€$,]/g, ""));
-                          if (!isNaN(num)) return num;
-                        }
-                        const massage = config.massageTypes.find(
-                          (m) => m.name === appt.massageType
-                        );
-                        return massage?.price ? parseFloat(massage.price.replace(/[€$,]/g, "")) : 0;
-                      };
-
-                      const totalIngresos = appointments.reduce((total, appt) => {
-                        return total + getPrice(appt);
-                      }, 0);
-
-                      const totalCitas = appointments.length;
-                      const citasPasadas = appointments.filter((a) => isBefore(parseISO(a.startTime), new Date())).length;
-                      const citasPendientes = totalCitas - citasPasadas;
-
-                      return (
-                        <>
-                          {/* Resumen de ingresos */}
-                          <div className="grid grid-cols-3 gap-3">
-                            <div className="bg-spa-elevated p-4 rounded-xl border border-white/5">
-                              <p className="text-[9px] text-[#7A7D7B] font-bold uppercase mb-1">
-                                Ingresos Totales
-                              </p>
-                              <p className="text-xl font-serif text-spa-gold">
-                                {totalIngresos.toFixed(2)}€
-                              </p>
-                            </div>
-                            <div className="bg-spa-elevated p-4 rounded-xl border border-white/5">
-                              <p className="text-[9px] text-[#7A7D7B] font-bold uppercase mb-1">
-                                Completadas
-                              </p>
-                              <p className="text-xl font-serif text-spa-crema">
-                                {citasPasadas}
-                              </p>
-                            </div>
-                            <div className="bg-spa-elevated p-4 rounded-xl border border-white/5">
-                              <p className="text-[9px] text-[#7A7D7B] font-bold uppercase mb-1">
-                                Pendientes
-                              </p>
-                              <p className="text-xl font-serif text-spa-gold">
-                                {citasPendientes}
-                              </p>
-                            </div>
-                          </div>
-
-                          {/* Historial */}
-                          {allAppointments.length === 0 ? (
-                            <div className="bg-spa-elevated border border-white/5 rounded-2xl p-6 text-center">
-                              <p className="text-sm text-[#7A7D7B]">Sin historial aún</p>
-                            </div>
-                          ) : (
-                            <div className="space-y-3 max-h-64 overflow-y-auto no-scrollbar">
-                              {allAppointments.slice(0, 30).map((appt) => {
-                                const isPast = isBefore(parseISO(appt.startTime), new Date());
-                                const price = getPrice(appt);
-                                return (
-                                  <div
-                                    key={appt.id}
-                                    className="bg-spa-elevated px-4 py-3 rounded-xl border border-white/5 flex items-center justify-between gap-4 group"
-                                  >
-                                    <div className="flex-1">
-                                      <p className="text-sm font-medium flex items-center gap-2">{appt.clientName}
-                                        <span className={`px-1.5 py-0.5 rounded-md text-[7px] font-bold uppercase tracking-wider border ${getStatusInfo(appt.status).className}`}>{getStatusInfo(appt.status).label}</span>
-                                      </p>
-                                      <p className="text-[10px] text-[#7A7D7B] mt-0.5">
-                                        {format(parseISO(appt.startTime), "d MMM yyyy", {
-                                          locale: es,
-                                        })}{" "}
-                                        • {appt.massageType || "Sin tipo"}
-                                        {(() => {
-                                          const mt = config.massageTypes.find(t => t.name === appt.massageType);
-                                          if (mt?.intensity) {
-                                            const info = getIntensityInfo(mt.intensity);
-                                            return <span className={`ml-1.5 px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider border ${info.className}`}>{info.label}</span>;
-                                          }
-                                          return null;
-                                        })()}
-                                        {appt.duration && ` • ${appt.duration}`}
-                                        {isPast && <span className="ml-2 text-emerald-500">✓</span>}
-                                      </p>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                      <button
-                                        onClick={() => { setEmailAppointment(appt); setShowEmailModal(true); }}
-                                        className="p-1.5 text-[#7A7D7B] hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
-                                        title="Enviar correo"
-                                      >
-                                        <Mail size={14} />
-                                      </button>
-                                      <button
-                                        onClick={() => handleAddToCalendar(appt)}
-                                        className="p-1.5 text-[#7A7D7B] hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-all"
-                                        title="Añadir al calendario"
-                                      >
-                                        <CalendarIcon size={14} />
-                                      </button>
-                                      <span className="text-sm font-bold text-spa-gold mx-1">
-                                        {price > 0 ? `${price.toFixed(2)}€` : "—"}
-                                      </span>
-                                      <button
-                                        onClick={() => handleAdminDelete(appt)}
-                                        className="p-2 text-[#7A7D7B] hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all"
-                                        title="Eliminar cita"
-                                      >
-                                        <Trash2 size={16} />
-                                      </button>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </div>
-
-                  <button
-                    onClick={handleLogout}
-                    className="flex items-center gap-4 text-rose-500"
-                  >
-                    <LogOut size={20} />
-                    Cerrar Sesión
-                  </button>
                 </div>
               </div>
             </motion.div>
           )}
 
+
+          {/* Clientes y Citas */}
+          {showClientsPage && isAdminAuth && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-[100] bg-spa-base/90 backdrop-blur-xl flex items-center justify-center p-6"
+            >
+              <div className="w-full max-w-2xl bg-spa-card rounded-[40px] border border-white/10 shadow-2xl max-h-[85vh] flex flex-col">
+                <div className="p-6 sm:p-10 pb-6 border-b border-white/5 flex justify-between items-center">
+                  <h2 className="text-3xl font-serif">Clientes y Citas</h2>
+                  <button onClick={() => setShowClientsPage(false)} className="p-3 bg-spa-elevated rounded-full hover:text-spa-gold"><X size={20}/></button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-6 sm:p-10 space-y-8 no-scrollbar">
+                  {/* Calendar */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <button onClick={() => setCalendarMonth(d => addDays(d, -30))} className="p-2 text-[#7A7D7B] hover:text-spa-gold transition-colors"><ChevronLeft size={18}/></button>
+                      <h3 className="text-[11px] font-bold text-spa-gold uppercase tracking-[0.4em]">{format(calendarMonth, "MMMM yyyy", { locale: es })}</h3>
+                      <button onClick={() => setCalendarMonth(d => addDays(d, 30))} className="p-2 text-[#7A7D7B] hover:text-spa-gold transition-colors"><ChevronRight size={18}/></button>
+                    </div>
+                    <div className="grid grid-cols-7 gap-1">
+                      {["L", "M", "M", "J", "V", "S", "D"].map(d => (
+                        <div key={d} className="text-center text-[8px] font-bold text-[#7A7D7B] uppercase tracking-widest py-1">{d}</div>
+                      ))}
+                      {(() => {
+                        const start = startOfMonth(calendarMonth);
+                        const end = endOfMonth(calendarMonth);
+                        const startDay = (start.getDay() + 6) % 7;
+                        const days: (Date | null)[] = [];
+                        for (let i = 0; i < startDay; i++) days.push(null);
+                        for (let d = 1; d <= end.getDate(); d++) days.push(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), d));
+                        return days.map((day, i) => {
+                          if (!day) return <div key={`e${i}`} />;
+                          const appts = appointments.filter(a => isSameDay(parseISO(a.startTime), day));
+                          const isSelected = selectedCalendarDay && isSameDay(day, selectedCalendarDay);
+                          const isToday = isSameDay(day, startOfToday());
+                          return (
+                            <button key={i} onClick={() => setSelectedCalendarDay(isSelected ? null : day)}
+                              className={cn(
+                                "aspect-square rounded-lg text-[10px] font-medium flex flex-col items-center justify-center transition-all relative",
+                                isSelected ? "bg-spa-gold text-spa-base shadow-lg scale-105" : isToday ? "bg-spa-accent/20 text-spa-crema border border-spa-accent/30" : "bg-spa-elevated text-[#7A7D7B] hover:bg-spa-accent/10 hover:text-spa-crema"
+                              )}
+                            >
+                              <span>{format(day, "d")}</span>
+                              {appts.length > 0 && <span className={cn("w-1 h-1 rounded-full mt-0.5", isSelected ? "bg-spa-base" : "bg-spa-gold")} />}
+                            </button>
+                          );
+                        });
+                      })()}
+                    </div>
+                    {selectedCalendarDay && (
+                      <div className="text-center text-[9px] text-spa-gold font-bold uppercase tracking-widest">
+                        {format(selectedCalendarDay, "EEEE d 'de' MMMM", { locale: es })} — {appointments.filter(a => isSameDay(parseISO(a.startTime), selectedCalendarDay)).length} cita(s)
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Citas del día seleccionado */}
+                  {selectedCalendarDay && (
+                    <div className="space-y-2">
+                      {appointments.filter(a => isSameDay(parseISO(a.startTime), selectedCalendarDay)).sort((a,b) => parseISO(a.startTime).getTime() - parseISO(b.startTime).getTime()).map(appt => (
+                        <div key={appt.id} className="bg-spa-elevated px-4 py-3 rounded-xl border border-white/5 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="text-center">
+                              <p className="text-lg font-serif text-spa-gold">{format(parseISO(appt.startTime), "HH:mm")}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium">{appt.clientName}</p>
+                              <p className="text-[9px] text-[#7A7D7B]">{appt.massageType || "Masaje"}{appt.duration && ` • ${appt.duration}`}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span className={`px-1.5 py-0.5 rounded-md text-[7px] font-bold uppercase tracking-wider border ${getStatusInfo(appt.status).className}`}>{getStatusInfo(appt.status).label}</span>
+                            <button onClick={() => { setViewingAppt(appt); setShowClientsPage(false); }} className="p-1.5 text-[#7A7D7B] hover:text-spa-gold transition-colors"><Eye size={14}/></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Próximas Citas */}
+                  <div className="space-y-4">
+                    <h3 className="text-[11px] font-bold text-spa-gold uppercase tracking-[0.4em]">Próximas Citas</h3>
+                    {(() => {
+                      const upcoming = appointments.filter(a => isAfter(parseISO(a.startTime), new Date())).sort((a,b) => parseISO(a.startTime).getTime() - parseISO(b.startTime).getTime());
+                      return upcoming.length === 0 ? (
+                        <div className="bg-spa-elevated border border-white/5 rounded-2xl p-6 text-center"><p className="text-sm text-[#7A7D7B]">Sin citas próximas</p></div>
+                      ) : (
+                        <div className="space-y-2">
+                          {upcoming.map(appt => (
+                            <div key={appt.id} className="bg-spa-elevated px-4 py-3 rounded-xl border border-white/5 flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3">
+                                <div className="text-center min-w-[40px]">
+                                  <p className="text-lg font-serif text-spa-gold">{format(parseISO(appt.startTime), "HH:mm")}</p>
+                                  <p className="text-[7px] text-[#7A7D7B] uppercase">{format(parseISO(appt.startTime), "d MMM", { locale: es })}</p>
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium">{appt.clientName}</p>
+                                  <p className="text-[9px] text-[#7A7D7B]">{appt.massageType || "Masaje"} • {appt.clientEmail}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <span className={`px-1.5 py-0.5 rounded-md text-[7px] font-bold uppercase tracking-wider border ${getStatusInfo(appt.status).className}`}>{getStatusInfo(appt.status).label}</span>
+                                <button onClick={() => { setEmailAppointment(appt); setShowEmailModal(true); }} className="p-1.5 text-[#7A7D7B] hover:text-blue-400 transition-colors" title="Correo"><Mail size={14}/></button>
+                                <button onClick={() => handleAddToCalendar(appt)} className="p-1.5 text-[#7A7D7B] hover:text-emerald-400 transition-colors" title="Calendario"><CalendarIcon size={14}/></button>
+                                <button onClick={() => { setViewingAppt(appt); setShowClientsPage(false); }} className="p-1.5 text-[#7A7D7B] hover:text-spa-gold transition-colors"><Eye size={14}/></button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Historial e Ingresos */}
+                  <div className="space-y-4">
+                    <h3 className="text-[11px] font-bold text-spa-gold uppercase tracking-[0.4em]">Historial e Ingresos</h3>
+                    {(() => {
+                      const allAppts = [...appointments].sort((a,b) => parseISO(a.startTime).getTime() - parseISO(b.startTime).getTime());
+                      const getPrice = (appt: any) => {
+                        if (appt.price) { const n = parseFloat(appt.price.replace(/[€$,]/g, "")); if (!isNaN(n)) return n; }
+                        const m = config.massageTypes.find(t => t.name === appt.massageType);
+                        return m?.price ? parseFloat(m.price.replace(/[€$,]/g, "")) : 0;
+                      };
+                      const ingresos = appointments.reduce((t, a) => t + getPrice(a), 0);
+                      const pasadas = appointments.filter(a => isBefore(parseISO(a.startTime), new Date())).length;
+                      const pendientes = appointments.length - pasadas;
+                      return (
+                        <>
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="bg-spa-elevated p-4 rounded-xl border border-white/5">
+                              <p className="text-[9px] text-[#7A7D7B] font-bold uppercase mb-1">Ingresos Totales</p>
+                              <p className="text-xl font-serif text-spa-gold">{ingresos.toFixed(2)}€</p>
+                            </div>
+                            <div className="bg-spa-elevated p-4 rounded-xl border border-white/5">
+                              <p className="text-[9px] text-[#7A7D7B] font-bold uppercase mb-1">Completadas</p>
+                              <p className="text-xl font-serif text-spa-crema">{pasadas}</p>
+                            </div>
+                            <div className="bg-spa-elevated p-4 rounded-xl border border-white/5">
+                              <p className="text-[9px] text-[#7A7D7B] font-bold uppercase mb-1">Pendientes</p>
+                              <p className="text-xl font-serif text-spa-gold">{pendientes}</p>
+                            </div>
+                          </div>
+                          <div className="space-y-2 max-h-60 overflow-y-auto no-scrollbar">
+                            {allAppts.slice(0, 30).map(appt => {
+                              const isPast = isBefore(parseISO(appt.startTime), new Date());
+                              const price = getPrice(appt);
+                              return (
+                                <div key={appt.id} className="bg-spa-elevated px-4 py-3 rounded-xl border border-white/5 flex items-center justify-between gap-3 group">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate">{appt.clientName}</p>
+                                    <p className="text-[9px] text-[#7A7D7B] truncate mt-0.5">
+                                      {format(parseISO(appt.startTime), "d MMM yyyy", { locale: es })} • {appt.massageType || "Sin tipo"}
+                                      {(() => { const mt = config.massageTypes.find(t => t.name === appt.massageType); return mt?.intensity ? <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[7px] font-bold uppercase border ${getIntensityInfo(mt.intensity).className}`}>{getIntensityInfo(mt.intensity).label}</span> : null; })()}
+                                      {isPast && <span className="ml-1 text-emerald-500">✓</span>}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <span className={`px-1.5 py-0.5 rounded-md text-[7px] font-bold uppercase tracking-wider border ${getStatusInfo(appt.status).className}`}>{getStatusInfo(appt.status).label}</span>
+                                    <button onClick={() => { setEmailAppointment(appt); setShowEmailModal(true); }} className="p-1.5 text-[#7A7D7B] hover:text-blue-400 rounded-lg transition-colors"><Mail size={14}/></button>
+                                    <button onClick={() => handleAddToCalendar(appt)} className="p-1.5 text-[#7A7D7B] hover:text-emerald-400 rounded-lg transition-colors"><CalendarIcon size={14}/></button>
+                                    <span className="text-xs font-bold text-spa-gold mx-0.5">{price > 0 ? `${price.toFixed(2)}€` : "—"}</span>
+                                    <button onClick={() => handleAdminDelete(appt)} className="p-1.5 text-[#7A7D7B] hover:text-rose-500 rounded-lg transition-colors"><Trash2 size={14}/></button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
 
           {/* Servicios */}
           {showServices && (
@@ -1647,10 +1618,16 @@ export default function App() {
                       <span className="text-sm font-medium">Servicios</span>
                     </button>
                     {isAdminAuth ? (
+                      <>
+                      <button onClick={() => { setShowSideMenu(false); setShowClientsPage(true); }} className="w-full flex items-center gap-3 p-3.5 bg-spa-elevated rounded-xl border border-white/5 hover:border-spa-gold/30 hover:bg-spa-accent/10 transition-all group">
+                        <div className="w-9 h-9 rounded-lg bg-spa-accent/10 flex items-center justify-center text-spa-gold group-hover:bg-spa-gold group-hover:text-spa-base transition-all shrink-0"><CalendarIcon size={16}/></div>
+                        <span className="text-sm font-medium">Clientes y Citas</span>
+                      </button>
                       <button onClick={() => { setShowSideMenu(false); setShowAdminPanel(true); }} className="w-full flex items-center gap-3 p-3.5 bg-spa-elevated rounded-xl border border-white/5 hover:border-spa-gold/30 hover:bg-spa-accent/10 transition-all group">
                         <div className="w-9 h-9 rounded-lg bg-spa-gold flex items-center justify-center text-spa-base shrink-0"><User size={16}/></div>
                         <span className="text-sm font-medium">Administración</span>
                       </button>
+                      </>
                     ) : (
                       <a href="/api/auth/google" className="w-full flex items-center gap-3 p-3.5 bg-spa-elevated rounded-xl border border-white/5 hover:border-spa-gold/30 hover:bg-spa-accent/10 transition-all group">
                         <div className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center text-spa-crema group-hover:bg-spa-gold group-hover:text-spa-base transition-all shrink-0"><User size={16}/></div>

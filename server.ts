@@ -193,6 +193,7 @@ async function startServer() {
           <td style="background:#1a2018;padding:30px 40px;border-bottom:1px solid rgba(143,114,86,0.2);">
             <p style="margin:0;font-family:Georgia,serif;font-size:28px;color:#F9F8F6;letter-spacing:1px;">Jean Pierre</p>
             <p style="margin:4px 0 0;font-size:11px;color:#8F7256;letter-spacing:3px;text-transform:uppercase;">Massage Studio</p>
+            <p style="margin:6px 0 0;font-size:10px;color:#C9A96E;letter-spacing:2px;font-style:italic;">La energía que fluye</p>
           </td>
         </tr>
 
@@ -853,6 +854,7 @@ db.prepare("INSERT INTO appointments (id, clientName, clientEmail, clientPhone, 
           <td style="background:#1a2018;padding:30px 40px;border-bottom:1px solid rgba(143,114,86,0.2);">
             <p style="margin:0;font-family:Georgia,serif;font-size:28px;color:#F9F8F6;letter-spacing:1px;">Jean Pierre</p>
             <p style="margin:4px 0 0;font-size:11px;color:#8F7256;letter-spacing:3px;text-transform:uppercase;">Massage Studio</p>
+            <p style="margin:6px 0 0;font-size:10px;color:#C9A96E;letter-spacing:2px;font-style:italic;">La energía que fluye</p>
           </td>
         </tr>
         <tr>
@@ -860,9 +862,12 @@ db.prepare("INSERT INTO appointments (id, clientName, clientEmail, clientPhone, 
             <h1 style="margin:0 0 20px;font-family:Georgia,serif;font-size:28px;color:#F9F8F6;font-weight:normal;">Tu cita está cerca</h1>
             <p style="margin:0 0 20px;font-size:15px;color:#A0A3A1;line-height:1.6;">Hola <strong style="color:#F9F8F6;">${appt.clientName}</strong>,</p>
             <p style="font-size:15px;color:#A0A3A1;line-height:1.6;">Tu cita de masaje es en aproximadamente <strong style="color:#F9F8F6;">2 horas</strong>. Aquí tienes la dirección del estudio:</p>
-            <div style="background:#1E2520;border:1px solid rgba(143,114,86,0.15);border-radius:12px;padding:24px;margin:25px 0;text-align:center;">
-              <p style="margin:0;font-size:16px;color:#F9F8F6;font-weight:500;line-height:1.6;">${cfg.address}</p>
-            </div>
+            <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cfg.address)}" target="_blank" style="text-decoration:none;">
+              <div style="background:#1E2520;border:1px solid rgba(143,114,86,0.15);border-radius:12px;padding:24px;margin:25px 0;text-align:center;transition:background 0.2s;">
+                <p style="margin:0;font-size:16px;color:#F9F8F6;font-weight:500;line-height:1.6;">${cfg.address}</p>
+                <p style="margin:8px 0 0;font-size:11px;color:#3B82F6;letter-spacing:1px;">📌 Ver en Google Maps →</p>
+              </div>
+            </a>
             <p style="font-size:14px;color:#A0A3A1;line-height:1.6;">
               <strong style="color:#F9F8F6;">${dateStr}</strong><br>
               Servicio: ${appt.massageType || 'Masaje Terapéutico'}

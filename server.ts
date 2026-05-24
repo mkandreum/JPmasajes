@@ -625,13 +625,26 @@ async function startServer() {
         });
         
         const dateStr = new Date(newStart).toLocaleString('es-ES', { 
-          weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' 
+          weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid'
         });
+        const confirmUrl = `${APP_URL}/api/appointments/${id}/confirm`;
+        const manageUrl = `${APP_URL}/?manage=${id}`;
+        const actionButtons = `
+<div style="margin:25px 0;">
+  <p style="font-size:15px;color:#A0A3A1;line-height:1.6;">Por favor, confirma tu asistencia o reagenda si lo necesitas:</p>
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:10px 0;">
+    <a href="${confirmUrl}" style="display:inline-block;background:#059669;color:#ffffff;text-decoration:none;padding:15px 30px;border-radius:12px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin:0 6px 8px;">✓ Sí, asistiré</a>
+    <a href="${manageUrl}" style="display:inline-block;background:#3B82F6;color:#ffffff;text-decoration:none;padding:15px 30px;border-radius:12px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin:0 6px 8px;">↻ No, reagendar</a>
+  </td></tr></table>
+  <p style="font-size:12px;color:#7A7D7B;line-height:1.5;margin-top:10px;">Si no respondes, te enviaremos un recordatorio más tarde.</p>
+</div>`;
         const html = getHtmlTemplate(
           "Cita Reagendada",
-          "<p>Tu cita ha sido modificada a un nuevo horario. Por favor, asegúrate de anotar la nueva fecha en tu calendario.</p>",
+          `<p>Tu cita ha sido modificada por el administrador a un nuevo horario. Por favor, confírmanos si puedes asistir en esta nueva fecha.</p>${actionButtons}`,
           appt.clientName,
-          dateStr
+          dateStr,
+          id,
+          appt.massageType
         );
         await sendEmail(appt.clientEmail, "Actualización de tu Cita - Jean Pierre", html);
 
@@ -899,8 +912,28 @@ async function startServer() {
           requestBody: { start: { dateTime: newStartTime }, end: { dateTime: newEnd } }
         });
 
-        const dateStr = new Date(newStartTime).toLocaleString('es-ES');
-        const html = getHtmlTemplate("Cita Reagendada", "<p>Tu cita ha sido movida con éxito a través del asistente virtual.</p>", appt.clientName, dateStr);
+        const dateStr = new Date(newStartTime).toLocaleString('es-ES', { 
+          weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid'
+        });
+        const confirmUrl = `${APP_URL}/api/appointments/${id}/confirm`;
+        const manageUrl = `${APP_URL}/?manage=${id}`;
+        const actionButtons = `
+<div style="margin:25px 0;">
+  <p style="font-size:15px;color:#A0A3A1;line-height:1.6;">Por favor, confirma tu asistencia o reagenda si lo necesitas:</p>
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:10px 0;">
+    <a href="${confirmUrl}" style="display:inline-block;background:#059669;color:#ffffff;text-decoration:none;padding:15px 30px;border-radius:12px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin:0 6px 8px;">✓ Sí, asistiré</a>
+    <a href="${manageUrl}" style="display:inline-block;background:#3B82F6;color:#ffffff;text-decoration:none;padding:15px 30px;border-radius:12px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin:0 6px 8px;">↻ No, reagendar</a>
+  </td></tr></table>
+  <p style="font-size:12px;color:#7A7D7B;line-height:1.5;margin-top:10px;">Si no respondes, te enviaremos un recordatorio más tarde.</p>
+</div>`;
+        const html = getHtmlTemplate(
+          "Cita Reagendada",
+          `<p>Tu cita ha sido movida con éxito a través del asistente virtual. Por favor, confírmanos tu asistencia en el nuevo horario seleccionado.</p>${actionButtons}`,
+          appt.clientName,
+          dateStr,
+          id,
+          appt.massageType
+        );
         await sendEmail(appt.clientEmail, "Cita Reagendada - Jean Pierre", html);
       } catch (e) { console.error(e); }
     }
@@ -971,11 +1004,43 @@ db.prepare("INSERT INTO appointments (id, clientName, clientEmail, clientPhone, 
              db.prepare("DELETE FROM appointments WHERE id = ?").run(args.appointmentId);
              responseText = `Cita cancelada.`;
           } else if (fnCall.name === "updateAppointment") {
-             const args = fnCall.args as any;
-             const endTime = new Date(new Date(args.newStartTime).getTime() + 60*60*1000).toISOString();
-             db.prepare("UPDATE appointments SET startTime = ?, endTime = ?, status = 'rescheduled' WHERE id = ?").run(args.newStartTime, endTime, args.appointmentId);
-             responseText = `Cita movida a las ${new Date(args.newStartTime).toLocaleString('es-ES')}.`;
-          }
+              const args = fnCall.args as any;
+              const appt = db.prepare("SELECT * FROM appointments WHERE id = ?").get(args.appointmentId) as any;
+              if (appt) {
+                const endTime = new Date(new Date(args.newStartTime).getTime() + 60*60*1000).toISOString();
+                db.prepare("UPDATE appointments SET startTime = ?, endTime = ?, status = 'rescheduled' WHERE id = ?").run(args.newStartTime, endTime, args.appointmentId);
+                
+                const tokens = getAdminTokens();
+                if (tokens) {
+                  try {
+                    const dateStr = new Date(args.newStartTime).toLocaleString('es-ES', { 
+                      weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid'
+                    });
+                    const confirmUrl = `${APP_URL}/api/appointments/${appt.id}/confirm`;
+                    const manageUrl = `${APP_URL}/?manage=${appt.id}`;
+                    const actionButtons = `
+<div style="margin:25px 0;">
+  <p style="font-size:15px;color:#A0A3A1;line-height:1.6;">Por favor, confirma tu asistencia o reagenda si lo necesitas:</p>
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:10px 0;">
+    <a href="${confirmUrl}" style="display:inline-block;background:#059669;color:#ffffff;text-decoration:none;padding:15px 30px;border-radius:12px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin:0 6px 8px;">✓ Sí, asistiré</a>
+    <a href="${manageUrl}" style="display:inline-block;background:#3B82F6;color:#ffffff;text-decoration:none;padding:15px 30px;border-radius:12px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin:0 6px 8px;">↻ No, reagendar</a>
+  </td></tr></table>
+  <p style="font-size:12px;color:#7A7D7B;line-height:1.5;margin-top:10px;">Si no respondes, te enviaremos un recordatorio más tarde.</p>
+</div>`;
+                    const html = getHtmlTemplate(
+                      "Cita Reagendada",
+                      `<p>Tu cita ha sido modificada con éxito a través del asistente virtual. Por favor, confírmanos tu asistencia en el nuevo horario seleccionado.</p>${actionButtons}`,
+                      appt.clientName,
+                      dateStr,
+                      appt.id,
+                      appt.massageType
+                    );
+                    await sendEmail(appt.clientEmail, "Cita Reagendada - Jean Pierre", html);
+                  } catch (e) { console.error("AI reschedule email error:", e); }
+                }
+              }
+              responseText = `Cita movida a las ${new Date(args.newStartTime).toLocaleString('es-ES')}.`;
+           }
        }
        res.json({ reply: responseText, functionCalled: result.functionCalls?.[0]?.name, newAppointments });
      } catch(e) {

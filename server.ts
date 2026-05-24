@@ -5,9 +5,19 @@ import path from "path";
 import { google } from "googleapis";
 import { GoogleGenAI, Type } from "@google/genai";
 import { v4 as uuidv4 } from "uuid";
+import rateLimit from "express-rate-limit";
 
 import Database from "better-sqlite3";
 import fs from "fs";
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 // Initialize persistent SQLite database
 const dataDir = path.join(process.cwd(), "data");
@@ -151,9 +161,50 @@ oauth2Client.on('tokens', (newTokens) => {
 // Setup Gemini
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
+const ADMIN_API_KEY = process.env.ADMIN_API_KEY || "";
+
+// Rate limiters
+const generalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  message: { error: "Demasiadas solicitudes. Intenta de nuevo en un minuto." },
+});
+
+const bookingLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  message: { error: "Demasiadas solicitudes de reserva. Intenta de nuevo en un minuto." },
+});
+
+const emailLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 3,
+  message: { error: "Demasiados envíos de correo. Intenta de nuevo en un minuto." },
+});
+
+// Auth middleware: protects admin endpoints if ADMIN_API_KEY is set
+const requireAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (!ADMIN_API_KEY) return next();
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ') || authHeader.slice(7) !== ADMIN_API_KEY) {
+    return res.status(401).json({ error: "No autorizado" });
+  }
+  next();
+};
+
+// Interval mutex flags
+let addressEmailRunning = false;
+let remindersRunning = false;
+
+// Interval references for graceful shutdown
+let addressEmailInterval: ReturnType<typeof setInterval> | null = null;
+let remindersInterval: ReturnType<typeof setInterval> | null = null;
+
 async function startServer() {
   const app = express();
   app.use(express.json({ limit: "20mb" }));
+
+  app.use("/api/", generalLimiter);
 
   // === API ROUTES ===
 
@@ -162,17 +213,27 @@ async function startServer() {
     const row = db.prepare("SELECT * FROM config WHERE id = 1").get() as any;
     let logoPosition = { x: 50, y: 50 };
     try { logoPosition = JSON.parse(row.logoPosition || '{"x":50,"y":50}'); } catch (e) {}
+    let morningHours: string[] = [];
+    try { morningHours = JSON.parse(row.morningHours); } catch (e) { morningHours = []; }
+    let afternoonHours: string[] = [];
+    try { afternoonHours = JSON.parse(row.afternoonHours); } catch (e) { afternoonHours = []; }
+    let massageTypes: any[] = [];
+    try { massageTypes = row.massageTypes ? JSON.parse(row.massageTypes) : []; } catch (e) { massageTypes = []; }
+    let blockedDays: string[] = [];
+    try { blockedDays = row.blockedDays ? JSON.parse(row.blockedDays) : []; } catch (e) { blockedDays = []; }
+    let blockedShifts: string[] = [];
+    try { blockedShifts = row.blockedShifts ? JSON.parse(row.blockedShifts) : []; } catch (e) { blockedShifts = []; }
     return {
       bannerUrl: row.bannerUrl,
-      morningHours: JSON.parse(row.morningHours),
-      afternoonHours: JSON.parse(row.afternoonHours),
-      massageTypes: row.massageTypes ? JSON.parse(row.massageTypes) : [],
+      morningHours,
+      afternoonHours,
+      massageTypes,
       address: row.address || "",
       logoUrl: row.logoUrl || "",
       logoPosition,
       tagline: row.tagline || "La energía que fluye",
-      blockedDays: row.blockedDays ? JSON.parse(row.blockedDays) : [],
-      blockedShifts: row.blockedShifts ? JSON.parse(row.blockedShifts) : []
+      blockedDays,
+      blockedShifts
     };
   };
 
@@ -210,7 +271,7 @@ async function startServer() {
           <td style="background:#1a2018;padding:30px 40px;border-bottom:1px solid rgba(143,114,86,0.2);">
             <p style="margin:0;font-family:Georgia,serif;font-size:28px;color:#F9F8F6;letter-spacing:1px;">Jean Pierre</p>
             <p style="margin:4px 0 0;font-size:11px;color:#8F7256;letter-spacing:3px;text-transform:uppercase;">Massage Studio</p>
-            <p style="margin:6px 0 0;font-size:10px;color:#C9A96E;letter-spacing:2px;font-style:italic;">${config.tagline || 'La energía que fluye'}</p>
+            <p style="margin:6px 0 0;font-size:10px;color:#C9A96E;letter-spacing:2px;font-style:italic;">${escapeHtml(config.tagline || 'La energía que fluye')}</p>
           </td>
         </tr>
 
@@ -218,7 +279,7 @@ async function startServer() {
         <tr>
           <td style="padding:35px 40px;">
             <h1 style="margin:0 0 20px;font-family:Georgia,serif;font-size:28px;color:#F9F8F6;font-weight:normal;">${title}</h1>
-            <p style="margin:0 0 20px;font-size:15px;color:#A0A3A1;line-height:1.6;">Hola <strong style="color:#F9F8F6;">${clientName}</strong>,</p>
+            <p style="margin:0 0 20px;font-size:15px;color:#A0A3A1;line-height:1.6;">Hola <strong style="color:#F9F8F6;">${escapeHtml(clientName)}</strong>,</p>
             <div style="font-size:15px;color:#A0A3A1;line-height:1.7;">${content}</div>
 
             <!-- INFO CARD -->
@@ -232,7 +293,7 @@ async function startServer() {
                     </tr>
                     <tr>
                       <td style="font-size:10px;color:#8F7256;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Servicio</td>
-                      <td style="font-size:14px;color:#F9F8F6;font-weight:500;">${massageType || 'Masaje Terapéutico'}</td>
+                      <td style="font-size:14px;color:#F9F8F6;font-weight:500;">${escapeHtml(massageType || 'Masaje Terapéutico')}</td>
                     </tr>
                     <tr>
                       <td style="font-size:10px;color:#8F7256;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Ubicación</td>
@@ -264,8 +325,15 @@ async function startServer() {
 
   const sendEmail = async (to: string, subject: string, html: string) => {
   const tokens = getAdminTokens();
-  if (!tokens) return;
-  
+  if (!tokens) throw new Error("Google Calendar no conectado");
+
+  if (to.includes('\r') || to.includes('\n')) {
+    throw new Error("Invalid email address: contains newlines");
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+    throw new Error("Invalid email address format");
+  }
+
   oauth2Client.setCredentials(tokens);
   const fromEmail = getAdminEmail() || "me";
   
@@ -300,7 +368,7 @@ async function startServer() {
     res.json(getConfig());
   });
 
-  app.put("/api/app-config", (req, res) => {
+  app.put("/api/app-config", requireAdmin, (req, res) => {
     const { bannerUrl, morningHours, afternoonHours, massageTypes, address, logoUrl, logoPosition, tagline, blockedDays, blockedShifts } = req.body;
     const current = getConfig();
     
@@ -331,7 +399,7 @@ async function startServer() {
   // Admin OAuth flow
   app.get("/api/auth/google", (req, res) => {
     if (!CLIENT_ID) {
-       return res.status(500).send("Falta GOOGLE_CLIENT_ID en variables de entorno.");
+       return res.status(500).json({ error: "Falta GOOGLE_CLIENT_ID en variables de entorno." });
     }
     const url = oauth2Client.generateAuthUrl({
       access_type: "offline",
@@ -359,7 +427,7 @@ async function startServer() {
         const authorizedEmail = process.env.ADMIN_EMAIL;
         
         if (!authorizedEmail || userEmail !== authorizedEmail) {
-           return res.status(403).send("No autorizado");
+           return res.status(403).json({ error: "No autorizado" });
         }
 
         db.prepare("INSERT OR REPLACE INTO admin_auth (id, tokens) VALUES (1, ?)")
@@ -367,7 +435,7 @@ async function startServer() {
         
         res.redirect("/?admin=true");
       } catch (e) {
-        res.status(500).send("Error en la autenticación: " + String(e));
+        res.status(500).json({ error: "Error en la autenticación: " + String(e) });
       }
     } else {
       res.redirect("/");
@@ -380,11 +448,25 @@ async function startServer() {
     res.json(rows);
   });
 
-  app.post("/api/appointments", async (req, res) => {
+  app.get("/api/appointments/:id", requireAdmin, (req, res) => {
+    const { id } = req.params;
+    const appt = db.prepare("SELECT * FROM appointments WHERE id = ?").get(id) as any;
+    if (!appt) return res.status(404).json({ error: "No encontrado" });
+    res.json(appt);
+  });
+
+  app.post("/api/appointments", bookingLimiter, async (req, res) => {
     const { clientName, clientEmail, clientPhone, startTime, endTime, massageType, price, duration } = req.body;
     
     if (!clientName || !clientEmail || !startTime || !endTime) {
       return res.status(400).json({ error: "Faltan datos requeridos." });
+    }
+
+    if (clientEmail.includes('\r') || clientEmail.includes('\n')) {
+      return res.status(400).json({ error: "Email inválido" });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail)) {
+      return res.status(400).json({ error: "Email inválido" });
     }
 
     const id = uuidv4();
@@ -398,7 +480,7 @@ async function startServer() {
           calendarId: "primary",
           requestBody: {
             summary: `Masaje: ${clientName}`,
-            description: `Teléfono: ${clientPhone}\nEmail: ${clientEmail}`,
+            description: `Teléfono: ${clientPhone || ""}\nEmail: ${clientEmail}`,
             start: { dateTime: startTime, timeZone: "Europe/Madrid" },
             end: { dateTime: endTime, timeZone: "Europe/Madrid" },
             attendees: [{ email: clientEmail }]
@@ -450,8 +532,8 @@ async function startServer() {
       if (adminEmail) {
         const adminHtml = getHtmlTemplate(
           "Nueva Reserva",
-          `<p>Has recibido una nueva reserva de <span style="color: #F9F8F6;">${clientName}</span>.</p>
-           <p>Email: ${clientEmail}<br>Tel: ${clientPhone || 'No prop.'}<br>Servicio: ${massageType || 'Masaje Terapéutico'}</p>`,
+          `<p>Has recibido una nueva reserva de <span style="color: #F9F8F6;">${escapeHtml(clientName)}</span>.</p>
+           <p>Email: ${escapeHtml(clientEmail)}<br>Tel: ${escapeHtml(clientPhone || 'No prop.')}<br>Servicio: ${escapeHtml(massageType || 'Masaje Terapéutico')}</p>`,
           "Jean Pierre",
           dateStr,
           id,
@@ -464,7 +546,7 @@ async function startServer() {
     res.json({ id, clientName, clientEmail, clientPhone, startTime, endTime, status: 'pending', eventId, massageType });
   });
 
-  app.put("/api/appointments/:id", async (req, res) => {
+  app.put("/api/appointments/:id", requireAdmin, async (req, res) => {
     const { id } = req.params;
     const { startTime, endTime } = req.body;
     const appt = db.prepare("SELECT * FROM appointments WHERE id = ?").get(id) as any;
@@ -507,8 +589,8 @@ async function startServer() {
         if (adminEmail) {
           const adminHtml = getHtmlTemplate(
             "Cita Reagendada",
-            `<p>La cita de <span style="color: #F9F8F6;">${appt.clientName}</span> ha sido modificada.</p>
-             <p>Nuevo horario: ${dateStr}<br>Email: ${appt.clientEmail}</p>`,
+            `<p>La cita de <span style="color: #F9F8F6;">${escapeHtml(appt.clientName)}</span> ha sido modificada.</p>
+             <p>Nuevo horario: ${dateStr}<br>Email: ${escapeHtml(appt.clientEmail)}</p>`,
             "Jean Pierre",
             dateStr
           );
@@ -521,7 +603,7 @@ async function startServer() {
     res.json({ ...appt, startTime: newStart, endTime: newEnd, status: 'rescheduled' });
   });
 
-  app.delete("/api/appointments/:id", async (req, res) => {
+  app.delete("/api/appointments/:id", requireAdmin, async (req, res) => {
     const { id } = req.params;
     const { reason } = req.body;
     
@@ -542,7 +624,7 @@ async function startServer() {
         const html = getHtmlTemplate(
           "Cita Cancelada",
           `<p>Lamentamos informarte que tu cita ha sido cancelada.</p>
-           ${reason ? `<p style="background: rgba(143,114,86,0.1); padding: 15px; border-radius: 10px; font-style: italic;">Motivo: ${reason}</p>` : ''}`,
+           ${reason ? `<p style="background: rgba(143,114,86,0.1); padding: 15px; border-radius: 10px; font-style: italic;">Motivo: ${escapeHtml(reason)}</p>` : ''}`,
           appt.clientName,
           dateStr
         );
@@ -553,8 +635,8 @@ async function startServer() {
         if (adminEmail) {
           const adminHtml = getHtmlTemplate(
             "Cita Cancelada",
-            `<p>La cita de <span style="color: #F9F8F6;">${appt.clientName}</span> ha sido cancelada.</p>
-             <p>Fecha: ${dateStr}<br>Email: ${appt.clientEmail}${reason ? `<br>Motivo: ${reason}` : ''}</p>`,
+            `<p>La cita de <span style="color: #F9F8F6;">${escapeHtml(appt.clientName)}</span> ha sido cancelada.</p>
+             <p>Fecha: ${dateStr}<br>Email: ${escapeHtml(appt.clientEmail)}${reason ? `<br>Motivo: ${escapeHtml(reason)}` : ''}</p>`,
             "Jean Pierre",
             dateStr
           );
@@ -572,7 +654,7 @@ async function startServer() {
   app.get("/api/appointments/:id/confirm", (req, res) => {
     const { id } = req.params;
     const appt = db.prepare("SELECT * FROM appointments WHERE id = ?").get(id) as any;
-    if (!appt) return res.status(404).send("Cita no encontrada");
+    if (!appt) return res.status(404).json({ error: "Cita no encontrada" });
 
     db.prepare("UPDATE appointments SET status = 'attending' WHERE id = ?").run(id);
 
@@ -588,7 +670,7 @@ async function startServer() {
   });
 
   // Resend confirmation email for an appointment
-  app.post("/api/appointments/:id/resend-email", async (req, res) => {
+  app.post("/api/appointments/:id/resend-email", requireAdmin, async (req, res) => {
     const { id } = req.params;
     const appt = db.prepare("SELECT * FROM appointments WHERE id = ?").get(id) as any;
     if (!appt) return res.status(404).json({ error: "Cita no encontrada" });
@@ -630,7 +712,7 @@ async function startServer() {
   });
 
   // Send custom email (template + optional custom text)
-  app.post("/api/appointments/:id/send-custom-email", async (req, res) => {
+  app.post("/api/appointments/:id/send-custom-email", requireAdmin, emailLimiter, async (req, res) => {
     const { id } = req.params;
     const { template, customText } = req.body;
     const appt = db.prepare("SELECT * FROM appointments WHERE id = ?").get(id) as any;
@@ -654,18 +736,18 @@ async function startServer() {
         break;
       case "address":
         subject = "Dirección del Estudio - Jean Pierre";
-        content = `<p>Tu cita está a punto de comenzar. Aquí tienes la dirección de nuestro estudio para que puedas llegar sin problemas:</p><div style="background:rgba(143,114,86,0.1);padding:15px 20px;border-radius:10px;border:1px solid rgba(143,114,86,0.2);margin:15px 0;"><p style="margin:0;font-size:16px;color:#F9F8F6;">${cfg.address}</p></div><p>Te esperamos para brindarte una experiencia única.</p>`;
+        content = `<p>Tu cita está a punto de comenzar. Aquí tienes la dirección de nuestro estudio para que puedas llegar sin problemas:</p><div style="background:rgba(143,114,86,0.1);padding:15px 20px;border-radius:10px;border:1px solid rgba(143,114,86,0.2);margin:15px 0;"><p style="margin:0;font-size:16px;color:#F9F8F6;">${escapeHtml(cfg.address)}</p></div><p>Te esperamos para brindarte una experiencia única.</p>`;
         break;
       default:
         subject = "Mensaje de tu Terapeuta - Jean Pierre";
         content = customText
-          ? `<p>${customText.replace(/\n/g, '</p><p>')}</p>`
+          ? `<p>${escapeHtml(customText).replace(/\n/g, '</p><p>')}</p>`
           : "<p>Mensaje de parte de tu terapeuta.</p>";
         break;
     }
 
     if (template !== "custom" && customText) {
-      content += `<div style="background:rgba(201,169,110,0.08);padding:15px 20px;border-radius:10px;border:1px solid rgba(201,169,110,0.15);margin-top:15px;"><p style="margin:0;font-size:14px;color:#C9A96E;font-style:italic;">${customText.replace(/\n/g, '<br>')}</p></div>`;
+      content += `<div style="background:rgba(201,169,110,0.08);padding:15px 20px;border-radius:10px;border:1px solid rgba(201,169,110,0.15);margin-top:15px;"><p style="margin:0;font-size:14px;color:#C9A96E;font-style:italic;">${escapeHtml(customText).replace(/\n/g, '<br>')}</p></div>`;
     }
 
     const html = getHtmlTemplate(subject.split(' - ')[0], content, appt.clientName, dateStr, id, appt.massageType);
@@ -680,7 +762,7 @@ async function startServer() {
   });
 
   // Add appointment to admin's Google Calendar
-  app.post("/api/appointments/:id/add-to-calendar", async (req, res) => {
+  app.post("/api/appointments/:id/add-to-calendar", requireAdmin, async (req, res) => {
     const { id } = req.params;
     const appt = db.prepare("SELECT * FROM appointments WHERE id = ?").get(id) as any;
     if (!appt) return res.status(404).json({ error: "Cita no encontrada" });
@@ -727,7 +809,7 @@ async function startServer() {
     const matched = db.prepare("SELECT * FROM appointments WHERE LOWER(clientEmail) = ?").all(email.trim().toLowerCase()) as any[];
     const now = new Date().toISOString();
     const filtered = matched.filter(a => 
-      (a.clientPhone.replace(/\s+/g, '') === verification.replace(/\s+/g, '') || 
+      ((a.clientPhone || "").replace(/\s+/g, '') === verification.replace(/\s+/g, '') || 
       a.clientName.toLowerCase().includes(verification.trim().toLowerCase())) &&
       a.startTime > now
     );
@@ -773,6 +855,7 @@ async function startServer() {
   app.post("/api/chat", async (req, res) => {
      try {
        const { messages } = req.body;
+       if (!messages || messages.length === 0) return res.status(400).json({ error: "Mensajes requeridos" });
        const appointments = db.prepare("SELECT * FROM appointments").all() as any[];
        const config = getConfig();
 
@@ -845,184 +928,161 @@ db.prepare("INSERT INTO appointments (id, clientName, clientEmail, clientPhone, 
 
   // Scheduler: send address email 2 hours before each appointment
   const checkAndSendAddressEmails = async () => {
-    const cfg = getConfig();
-    if (!cfg.address || !getAdminTokens()) return;
+    if (addressEmailRunning) return;
+    addressEmailRunning = true;
+    try {
+      const cfg = getConfig();
+      if (!cfg.address || !getAdminTokens()) return;
 
-    const now = new Date();
-    const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-    const tolerance = 5 * 60 * 1000; // 5 minutes tolerance
-    const lowerBound = new Date(twoHoursLater.getTime() - tolerance).toISOString();
-    const upperBound = new Date(twoHoursLater.getTime() + tolerance).toISOString();
+      const now = new Date();
+      const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+      const tolerance = 5 * 60 * 1000;
+      const lowerBound = new Date(twoHoursLater.getTime() - tolerance).toISOString();
+      const upperBound = new Date(twoHoursLater.getTime() + tolerance).toISOString();
 
-    const rows = db.prepare(
-      "SELECT * FROM appointments WHERE startTime BETWEEN ? AND ? AND status = 'attending' AND (addressSent IS NULL OR addressSent = 0)"
-    ).all(lowerBound, upperBound) as any[];
+      const rows = db.prepare(
+        "SELECT * FROM appointments WHERE startTime BETWEEN ? AND ? AND status = 'attending' AND (addressSent IS NULL OR addressSent = 0)"
+      ).all(lowerBound, upperBound) as any[];
 
-    for (const appt of rows) {
-      try {
-        const dateStr = new Date(appt.startTime).toLocaleString('es-ES', {
-          weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid'
-        });
-        const addressHtml = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#0E1410;font-family:Georgia,serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0E1410;padding:20px 0;">
-    <tr><td align="center">
-      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#141A16;border:1px solid rgba(143,114,86,0.25);border-radius:16px;overflow:hidden;">
-        <tr>
-          <td style="background:#1a2018;padding:30px 40px;border-bottom:1px solid rgba(143,114,86,0.2);">
-            <p style="margin:0;font-family:Georgia,serif;font-size:28px;color:#F9F8F6;letter-spacing:1px;">Jean Pierre</p>
-            <p style="margin:4px 0 0;font-size:11px;color:#8F7256;letter-spacing:3px;text-transform:uppercase;">Massage Studio</p>
-            <p style="margin:6px 0 0;font-size:10px;color:#C9A96E;letter-spacing:2px;font-style:italic;">${cfg.tagline || 'La energía que fluye'}</p>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:35px 40px;">
-            <h1 style="margin:0 0 20px;font-family:Georgia,serif;font-size:28px;color:#F9F8F6;font-weight:normal;">Tu cita está cerca</h1>
-            <p style="margin:0 0 20px;font-size:15px;color:#A0A3A1;line-height:1.6;">Hola <strong style="color:#F9F8F6;">${appt.clientName}</strong>,</p>
-            <p style="font-size:15px;color:#A0A3A1;line-height:1.6;">Tu cita de masaje es en aproximadamente <strong style="color:#F9F8F6;">2 horas</strong>. Aquí tienes la dirección del estudio:</p>
+      for (const appt of rows) {
+        try {
+          const dateStr = new Date(appt.startTime).toLocaleString('es-ES', {
+            weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid'
+          });
+
+          const content = `<p>Tu cita de masaje es en aproximadamente <strong style="color:#F9F8F6;">2 horas</strong>. Aquí tienes la dirección del estudio:</p>
             <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cfg.address)}" target="_blank" style="text-decoration:none;">
               <div style="background:#1E2520;border:1px solid rgba(143,114,86,0.15);border-radius:12px;padding:24px;margin:25px 0;text-align:center;transition:background 0.2s;">
-                <p style="margin:0;font-size:16px;color:#F9F8F6;font-weight:500;line-height:1.6;">${cfg.address}</p>
+                <p style="margin:0;font-size:16px;color:#F9F8F6;font-weight:500;line-height:1.6;">${escapeHtml(cfg.address)}</p>
                 <p style="margin:8px 0 0;font-size:11px;color:#3B82F6;letter-spacing:1px;">📌 Ver en Google Maps →</p>
               </div>
             </a>
             <p style="font-size:14px;color:#A0A3A1;line-height:1.6;">
               <strong style="color:#F9F8F6;">${dateStr}</strong><br>
-              Servicio: ${appt.massageType || 'Masaje Terapéutico'}
+              Servicio: ${escapeHtml(appt.massageType || 'Masaje Terapéutico')}
             </p>
-            <p style="font-size:14px;color:#A0A3A1;line-height:1.6;margin-top:20px;">Por favor, llega 5-10 minutos antes para disfrutar de una experiencia completa.</p>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:20px 40px;border-top:1px solid rgba(255,255,255,0.06);background:#0E1410;text-align:center;">
-            <p style="margin:0;font-size:11px;color:#5A5D5B;">© 2026 Jean Pierre Massage Studio. Todos los derechos reservados.</p>
-          </td>
-        </tr>
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>`;
+            <p style="font-size:14px;color:#A0A3A1;line-height:1.6;margin-top:20px;">Por favor, llega 5-10 minutos antes para disfrutar de una experiencia completa.</p>`;
 
-        oauth2Client.setCredentials(getAdminTokens());
-        const fromEmail = getAdminEmail() || "me";
-        const subject = "📍 Dirección del Estudio - Jean Pierre";
-        const encodedSubject = Buffer.from(subject, 'utf-8').toString('base64');
-        const message = [
-          `To: ${appt.clientEmail}`,
-          `From: "Jean Pierre Vegas" <${fromEmail}>`,
-          `Subject: =?utf-8?B?${encodedSubject}?=`,
-          `MIME-Version: 1.0`,
-          `Content-Type: text/html; charset=utf-8`,
-          `Content-Transfer-Encoding: 8bit`,
-          ``,
-          addressHtml
-        ].join('\r\n');
-        const encodedMessage = Buffer.from(message, "utf-8").toString("base64url");
-        await gmail.users.messages.send({ userId: "me", requestBody: { raw: encodedMessage } });
-        db.prepare("UPDATE appointments SET addressSent = 1 WHERE id = ?").run(appt.id);
-        console.log(`Address email sent for appointment ${appt.id}`);
-      } catch (e) {
-        console.error(`Failed to send address email for ${appt.id}:`, e);
+          const addressHtml = getHtmlTemplate(
+            "Tu cita está cerca",
+            content,
+            appt.clientName,
+            dateStr,
+            appt.id,
+            appt.massageType
+          );
+
+          await sendEmail(appt.clientEmail, "📍 Dirección del Estudio - Jean Pierre", addressHtml);
+          db.prepare("UPDATE appointments SET addressSent = 1 WHERE id = ?").run(appt.id);
+          console.log(`Address email sent for appointment ${appt.id}`);
+        } catch (e) {
+          console.error(`Failed to send address email for ${appt.id}:`, e);
+        }
       }
+    } finally {
+      addressEmailRunning = false;
     }
   };
-  setInterval(checkAndSendAddressEmails, 60 * 1000);
+  addressEmailInterval = setInterval(checkAndSendAddressEmails, 60 * 1000);
   checkAndSendAddressEmails();
 
   // Scheduler: send reminder emails for pending appointments
   const checkAndSendReminders = async () => {
-    const tokens = getAdminTokens();
-    if (!tokens) return;
+    if (remindersRunning) return;
+    remindersRunning = true;
+    try {
+      const tokens = getAdminTokens();
+      if (!tokens) return;
 
-    const now = new Date();
-    const tolerance = 5 * 60 * 1000;
+      const now = new Date();
+      const tolerance = 5 * 60 * 1000;
 
-    // 6 hours before — first reminder
-    const sixHoursLater = new Date(now.getTime() + 6 * 60 * 60 * 1000);
-    const reminder6hRows = db.prepare(
-      "SELECT * FROM appointments WHERE startTime BETWEEN ? AND ? AND status = 'pending' AND (reminder6hSent IS NULL OR reminder6hSent = 0)"
-    ).all(
-      new Date(sixHoursLater.getTime() - tolerance).toISOString(),
-      new Date(sixHoursLater.getTime() + tolerance).toISOString()
-    ) as any[];
+      // 6 hours before — first reminder
+      const sixHoursLater = new Date(now.getTime() + 6 * 60 * 60 * 1000);
+      const reminder6hRows = db.prepare(
+        "SELECT * FROM appointments WHERE startTime BETWEEN ? AND ? AND status = 'pending' AND (reminder6hSent IS NULL OR reminder6hSent = 0)"
+      ).all(
+        new Date(sixHoursLater.getTime() - tolerance).toISOString(),
+        new Date(sixHoursLater.getTime() + tolerance).toISOString()
+      ) as any[];
 
-    for (const appt of reminder6hRows) {
-      try {
-        const dateStr = new Date(appt.startTime).toLocaleString('es-ES', {
-          weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid'
-        });
-        const confirmUrl = `${APP_URL}/api/appointments/${appt.id}/confirm`;
-        const manageUrl = `${APP_URL}/?manage=${appt.id}`;
-        const reminderHtml = getHtmlTemplate(
-          "Recordatorio de Confirmación",
-          `<p>Te recordamos que aún no has confirmado tu asistencia para la siguiente cita:</p>
-           <div style="background:#1E2520;border:1px solid rgba(143,114,86,0.15);border-radius:12px;padding:20px;margin:20px 0;">
-             <p style="margin:0;font-size:14px;color:#F9F8F6;"><strong>${dateStr}</strong></p>
-             <p style="margin:5px 0 0;font-size:13px;color:#A0A3A1;">${appt.massageType || 'Masaje Terapéutico'}</p>
-           </div>
-           <div style="margin:20px 0;text-align:center;">
-             <a href="${confirmUrl}" style="display:inline-block;background:#059669;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin:0 5px 8px;">✓ Confirmar Asistencia</a>
-             <a href="${manageUrl}" style="display:inline-block;background:#3B82F6;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin:0 5px 8px;">↻ Reagendar</a>
-           </div>
-           <p style="font-size:13px;color:#7A7D7B;">Si no respondes, te enviaremos otro recordatorio más cerca de la fecha.</p>`,
-          appt.clientName,
-          dateStr,
-          appt.id,
-          appt.massageType
-        );
-        await sendEmail(appt.clientEmail, "Recordatorio: Confirma tu asistencia - Jean Pierre", reminderHtml);
-        db.prepare("UPDATE appointments SET reminder6hSent = 1 WHERE id = ?").run(appt.id);
-        console.log(`Reminder 6h sent for appointment ${appt.id}`);
-      } catch (e) {
-        console.error(`Failed to send 6h reminder for ${appt.id}:`, e);
+      for (const appt of reminder6hRows) {
+        try {
+          const dateStr = new Date(appt.startTime).toLocaleString('es-ES', {
+            weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid'
+          });
+          const confirmUrl = `${APP_URL}/api/appointments/${appt.id}/confirm`;
+          const manageUrl = `${APP_URL}/?manage=${appt.id}`;
+          const reminderHtml = getHtmlTemplate(
+            "Recordatorio de Confirmación",
+            `<p>Te recordamos que aún no has confirmado tu asistencia para la siguiente cita:</p>
+             <div style="background:#1E2520;border:1px solid rgba(143,114,86,0.15);border-radius:12px;padding:20px;margin:20px 0;">
+               <p style="margin:0;font-size:14px;color:#F9F8F6;"><strong>${dateStr}</strong></p>
+               <p style="margin:5px 0 0;font-size:13px;color:#A0A3A1;">${escapeHtml(appt.massageType || 'Masaje Terapéutico')}</p>
+             </div>
+             <div style="margin:20px 0;text-align:center;">
+               <a href="${confirmUrl}" style="display:inline-block;background:#059669;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin:0 5px 8px;">✓ Confirmar Asistencia</a>
+               <a href="${manageUrl}" style="display:inline-block;background:#3B82F6;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin:0 5px 8px;">↻ Reagendar</a>
+             </div>
+             <p style="font-size:13px;color:#7A7D7B;">Si no respondes, te enviaremos otro recordatorio más cerca de la fecha.</p>`,
+            appt.clientName,
+            dateStr,
+            appt.id,
+            appt.massageType
+          );
+          await sendEmail(appt.clientEmail, "Recordatorio: Confirma tu asistencia - Jean Pierre", reminderHtml);
+          db.prepare("UPDATE appointments SET reminder6hSent = 1 WHERE id = ?").run(appt.id);
+          console.log(`Reminder 6h sent for appointment ${appt.id}`);
+        } catch (e) {
+          console.error(`Failed to send 6h reminder for ${appt.id}:`, e);
+        }
       }
-    }
 
-    // 2 hours before — second reminder (if still pending)
-    const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-    const reminder2hRows = db.prepare(
-      "SELECT * FROM appointments WHERE startTime BETWEEN ? AND ? AND status = 'pending' AND (reminder2hSent IS NULL OR reminder2hSent = 0)"
-    ).all(
-      new Date(twoHoursLater.getTime() - tolerance).toISOString(),
-      new Date(twoHoursLater.getTime() + tolerance).toISOString()
-    ) as any[];
+      // 2 hours before — second reminder (if still pending)
+      const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+      const reminder2hRows = db.prepare(
+        "SELECT * FROM appointments WHERE startTime BETWEEN ? AND ? AND status = 'pending' AND (reminder2hSent IS NULL OR reminder2hSent = 0)"
+      ).all(
+        new Date(twoHoursLater.getTime() - tolerance).toISOString(),
+        new Date(twoHoursLater.getTime() + tolerance).toISOString()
+      ) as any[];
 
-    for (const appt of reminder2hRows) {
-      try {
-        const dateStr = new Date(appt.startTime).toLocaleString('es-ES', {
-          weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid'
-        });
-        const confirmUrl = `${APP_URL}/api/appointments/${appt.id}/confirm`;
-        const manageUrl = `${APP_URL}/?manage=${appt.id}`;
-        const reminderHtml = getHtmlTemplate(
-          "Último Recordatorio",
-          `<p>Tu cita es en aproximadamente <strong style="color:#F9F8F6;">2 horas</strong> y aún no has confirmado tu asistencia.</p>
-           <div style="background:#1E2520;border:1px solid rgba(143,114,86,0.15);border-radius:12px;padding:20px;margin:20px 0;">
-             <p style="margin:0;font-size:14px;color:#F9F8F6;"><strong>${dateStr}</strong></p>
-             <p style="margin:5px 0 0;font-size:13px;color:#A0A3A1;">${appt.massageType || 'Masaje Terapéutico'}</p>
-           </div>
-           <p style="font-size:15px;color:#A0A3A1;line-height:1.6;">Por favor, confirma si podrás asistir o reagenda a otro horario:</p>
-           <div style="margin:20px 0;text-align:center;">
-             <a href="${confirmUrl}" style="display:inline-block;background:#059669;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin:0 5px 8px;">✓ Sí, asistiré</a>
-             <a href="${manageUrl}" style="display:inline-block;background:#3B82F6;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin:0 5px 8px;">↻ Reagendar</a>
-           </div>`,
-          appt.clientName,
-          dateStr,
-          appt.id,
-          appt.massageType
-        );
-        await sendEmail(appt.clientEmail, "⏰ Tu cita es pronto - Jean Pierre", reminderHtml);
-        db.prepare("UPDATE appointments SET reminder2hSent = 1 WHERE id = ?").run(appt.id);
-        console.log(`Reminder 2h sent for appointment ${appt.id}`);
-      } catch (e) {
-        console.error(`Failed to send 2h reminder for ${appt.id}:`, e);
+      for (const appt of reminder2hRows) {
+        try {
+          const dateStr = new Date(appt.startTime).toLocaleString('es-ES', {
+            weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid'
+          });
+          const confirmUrl = `${APP_URL}/api/appointments/${appt.id}/confirm`;
+          const manageUrl = `${APP_URL}/?manage=${appt.id}`;
+          const reminderHtml = getHtmlTemplate(
+            "Último Recordatorio",
+            `<p>Tu cita es en aproximadamente <strong style="color:#F9F8F6;">2 horas</strong> y aún no has confirmado tu asistencia.</p>
+             <div style="background:#1E2520;border:1px solid rgba(143,114,86,0.15);border-radius:12px;padding:20px;margin:20px 0;">
+               <p style="margin:0;font-size:14px;color:#F9F8F6;"><strong>${dateStr}</strong></p>
+               <p style="margin:5px 0 0;font-size:13px;color:#A0A3A1;">${escapeHtml(appt.massageType || 'Masaje Terapéutico')}</p>
+             </div>
+             <p style="font-size:15px;color:#A0A3A1;line-height:1.6;">Por favor, confirma si podrás asistir o reagenda a otro horario:</p>
+             <div style="margin:20px 0;text-align:center;">
+               <a href="${confirmUrl}" style="display:inline-block;background:#059669;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin:0 5px 8px;">✓ Sí, asistiré</a>
+               <a href="${manageUrl}" style="display:inline-block;background:#3B82F6;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin:0 5px 8px;">↻ Reagendar</a>
+             </div>`,
+            appt.clientName,
+            dateStr,
+            appt.id,
+            appt.massageType
+          );
+          await sendEmail(appt.clientEmail, "⏰ Tu cita es pronto - Jean Pierre", reminderHtml);
+          db.prepare("UPDATE appointments SET reminder2hSent = 1 WHERE id = ?").run(appt.id);
+          console.log(`Reminder 2h sent for appointment ${appt.id}`);
+        } catch (e) {
+          console.error(`Failed to send 2h reminder for ${appt.id}:`, e);
+        }
       }
+    } finally {
+      remindersRunning = false;
     }
   };
-  setInterval(checkAndSendReminders, 60 * 1000);
+  remindersInterval = setInterval(checkAndSendReminders, 60 * 1000);
   checkAndSendReminders();
 
   // Vite middleware for development
@@ -1046,3 +1106,20 @@ db.prepare("INSERT INTO appointments (id, clientName, clientEmail, clientPhone, 
 }
 
 startServer();
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('Shutting down...');
+  if (addressEmailInterval) clearInterval(addressEmailInterval);
+  if (remindersInterval) clearInterval(remindersInterval);
+  db.close();
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('Shutting down...');
+  if (addressEmailInterval) clearInterval(addressEmailInterval);
+  if (remindersInterval) clearInterval(remindersInterval);
+  db.close();
+  process.exit(0);
+});

@@ -1,14 +1,29 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Menu, User, Clock, ChevronLeft, ChevronRight, X, Calendar as CalendarIcon, Phone, Mail, Leaf, MessageCircle, Send, LogOut, Sun, Moon, Plus, Trash2, Eye, Check, Sparkles, Lock, Unlock } from "lucide-react";
-import { format, addDays, startOfToday, startOfMonth, endOfMonth, parseISO, isSameDay, setHours, setMinutes, isBefore, isAfter } from "date-fns";
+import { Menu, User, ChevronLeft, ChevronRight, X, Calendar as CalendarIcon, Phone, Mail, Leaf, MessageCircle, Send, LogOut, Sun, Moon, Plus, Trash2, Eye, Check, Lock, Unlock } from "lucide-react";
+import { format, addDays, startOfToday, parseISO, isSameDay, setHours, setMinutes, isBefore, isAfter } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast, Toaster } from "sonner";
 import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { cn } from "../lib/utils";
 
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
+class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean}> {
+  constructor(props: {children: React.ReactNode}) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() {
+    if (this.state.hasError) {
+      return <div className="fixed inset-0 bg-spa-base flex items-center justify-center text-spa-crema p-8">
+        <div className="text-center">
+          <h2 className="text-xl font-serif mb-4">Algo salió mal</h2>
+          <p className="text-sm text-[#7A7D7B] mb-4">Recarga la página o contacta al administrador</p>
+          <button onClick={() => window.location.reload()} className="px-4 py-2 bg-spa-gold text-spa-base rounded-xl text-sm font-bold">Recargar</button>
+        </div>
+      </div>;
+    }
+    return this.props.children;
+  }
 }
 
 const intensityOptions = [
@@ -29,6 +44,13 @@ const getStatusInfo = (status?: string) => {
     default: return { label: "Confirmada", className: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" };
   }
 };
+
+interface SlotInfo {
+  time: Date;
+  isAvailable: boolean;
+  isPast: boolean;
+  appointment?: Appointment;
+}
 
 interface Appointment {
   id?: string;
@@ -76,6 +98,7 @@ export default function App() {
   const [showMassageError, setShowMassageError] = useState(false);
   const [viewingAppt, setViewingAppt] = useState<Appointment | null>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [showSideMenu, setShowSideMenu] = useState(false);
   const [showServices, setShowServices] = useState(false);
   const [activeShift, setActiveShift] = useState<"morning" | "afternoon">("morning");
@@ -116,12 +139,15 @@ export default function App() {
   const [botRescheduleSlot, setBotRescheduleSlot] = useState<Date|null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     const now = new Date();
     if (now.getHours() >= 14) setActiveShift("afternoon");
     
     fetch("/api/config")
       .then(r => r.json())
       .then(d => {
+        if (cancelled) return;
         setHasCreds(d.hasCredentials);
         if (window.location.search.includes("admin=true") || localStorage.getItem("isAdmin") === "true") {
            setIsAdminAuth(true);
@@ -138,6 +164,7 @@ export default function App() {
         if (manageId) {
             // Find the appointment and show bot management
             fetchAppointments().then(appts => {
+                if (cancelled) return;
                 const appt = (appts as any[]).find(a => a.id === manageId);
                 if (appt) {
                     setBotData(prev => ({...prev, email: appt.clientEmail, appts: [appt]}));
@@ -145,25 +172,48 @@ export default function App() {
                     setShowBot(true);
                     window.history.replaceState({}, document.title, "/");
                 }
+            }).catch(() => {
+              if (!cancelled) toast.error("Error al consultar la cita");
             });
         }
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("Error al cargar configuración");
       });
       
     fetchConfig();
     fetchAppointments();
+
+    return () => { cancelled = true; };
   }, []);
 
   const fetchConfig = async () => {
-    const r = await fetch("/api/app-config");
-    const d = await r.json();
-    setConfig(d);
+    try {
+      const r = await fetch("/api/app-config");
+      const d = await r.json();
+      setConfig(d);
+      const now = new Date();
+      const afternoonThreshold = d.afternoonHours?.length > 0
+        ? parseInt(d.afternoonHours[0].split(":")[0])
+        : 14;
+      if (now.getHours() >= afternoonThreshold) setActiveShift("afternoon");
+    } catch {
+      toast.error("Error al cargar configuración");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const fetchAppointments = async () => {
-    const res = await fetch("/api/appointments");
-    const data = await res.json();
-    setAppointments(data);
-    return data;
+    try {
+      const res = await fetch("/api/appointments");
+      const data = await res.json();
+      setAppointments(data);
+      return data;
+    } catch {
+      toast.error("Error al cargar citas");
+      return [];
+    }
   };
 
   const handleUpdateConfig = async (newConfig: AppConfig) => {
@@ -238,25 +288,33 @@ export default function App() {
 
   const handleBotVerify = async (val: string) => {
     if (!val) return;
-    const res = await fetch("/api/bot/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: botData.email, verification: val })
-    });
-    if (res.ok) {
-        const data = await res.json();
-        setBotData({...botData, verification: val, appts: data});
-        setBotStep("show_appointments");
-    } else {
-        toast.error("No se encontraron citas. Verifica tus datos.");
+    try {
+      const res = await fetch("/api/bot/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: botData.email, verification: val })
+      });
+      if (res.ok) {
+          const data = await res.json();
+          setBotData({...botData, verification: val, appts: data});
+          setBotStep("show_appointments");
+      } else {
+          toast.error("No se encontraron citas. Verifica tus datos.");
+      }
+    } catch {
+      toast.error("Error de conexión al verificar");
     }
   };
 
   const handleAdminDelete = async (appt: Appointment) => {
     if (confirm(`¿Eliminar la cita de ${appt.clientName}?`)) {
-      await fetch(`/api/appointments/${appt.id}`, { method: "DELETE" });
-      toast.success("Cita eliminada");
-      fetchAppointments();
+      try {
+        await fetch(`/api/appointments/${appt.id}`, { method: "DELETE" });
+        toast.success("Cita eliminada");
+        fetchAppointments();
+      } catch {
+        toast.error("Error al eliminar cita");
+      }
     }
   };
 
@@ -329,14 +387,18 @@ export default function App() {
     const reason = prompt("Motivo de la cancelación (opcional):");
     if (reason === null) return;
     if (confirm(`¿Cancelar cita de ${appt.clientName}?`)) {
-      await fetch(`/api/appointments/${appt.id}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: reason || undefined })
-      });
-      toast.success("Cita cancelada");
-      setViewingAppt(null);
-      fetchAppointments();
+      try {
+        await fetch(`/api/appointments/${appt.id}`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: reason || undefined })
+        });
+        toast.success("Cita cancelada");
+        setViewingAppt(null);
+        fetchAppointments();
+      } catch {
+        toast.error("Error al cancelar cita");
+      }
     }
   };
 
@@ -351,7 +413,9 @@ export default function App() {
         body: JSON.stringify({ blockedDays: newBlockedDays })
       });
       if (res.ok) setConfig(await res.json());
-    } catch {}
+    } catch {
+      toast.error("Error al bloquear día");
+    }
   };
 
   const toggleShiftBlock = async (date: Date, shift: "morning" | "afternoon") => {
@@ -366,7 +430,9 @@ export default function App() {
         body: JSON.stringify({ blockedShifts: newBlockedShifts })
       });
       if (res.ok) setConfig(await res.json());
-    } catch {}
+    } catch {
+      toast.error("Error al bloquear turno");
+    }
   };
 
   const isDayBlocked = (date: Date) => (config.blockedDays || []).includes(format(date, "yyyy-MM-dd"));
@@ -427,19 +493,23 @@ export default function App() {
 
   const handleAdminReschedule = async (newSlot: Date) => {
     if (!rescheduleApptId) return;
-    await fetch(`/api/appointments/${rescheduleApptId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        startTime: newSlot.toISOString(),
-        endTime: new Date(newSlot.getTime() + 60*60*1000).toISOString()
-      })
-    });
-    toast.success("Cita reprogramada");
-    setViewingAppt(null);
-    setAdminRescheduleSlot(null);
-    setRescheduleApptId(null);
-    fetchAppointments();
+    try {
+      await fetch(`/api/appointments/${rescheduleApptId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startTime: newSlot.toISOString(),
+          endTime: new Date(newSlot.getTime() + 60*60*1000).toISOString()
+        })
+      });
+      toast.success("Cita reprogramada");
+      setViewingAppt(null);
+      setAdminRescheduleSlot(null);
+      setRescheduleApptId(null);
+      fetchAppointments();
+    } catch {
+      toast.error("Error al reprogramar cita");
+    }
   };
 
   const containerVariants = {
@@ -455,7 +525,7 @@ export default function App() {
     show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring", stiffness: 300, damping: 25 } }
   };
 
-  const renderSlot = (slot: any) => {
+  const renderSlot = (slot: SlotInfo) => {
     const isReserved = !slot.isAvailable && !slot.isPast;
     return (
       <motion.button
@@ -499,7 +569,16 @@ export default function App() {
 
   const upcomingDays = Array.from({ length: 14 }).map((_, i) => addDays(startOfToday(), i));
 
+  if (isLoading && !config.bannerUrl) {
+    return (
+      <div className="fixed inset-0 bg-spa-base flex items-center justify-center">
+        <div className="w-10 h-10 border-2 border-spa-gold border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
+    <ErrorBoundary>
     <div className="fixed inset-0 bg-spa-base flex flex-col items-center sm:p-6 font-sans text-spa-crema overflow-hidden">
       <div className="noise-overlay" />
       <Toaster position="top-center" richColors theme="dark" />
@@ -1618,9 +1697,13 @@ export default function App() {
                                         <button onClick={() => { setBotData({...botData, selectedApptId: a.id!}); setBotStep("reschedule"); }} className="flex-1 py-3 bg-spa-accent/10 border border-spa-accent/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-spa-gold hover:bg-spa-accent hover:text-spa-base transition-all">Reagendar</button>
                                         <button onClick={async () => {
                                             if (confirm("¿Estás seguro de cancelar?")) {
-                                                await fetch(`/api/appointments/${a.id}`, { method: "DELETE" });
-                                                toast.success("Cita cancelada");
-                                                setBotStep("greeting");
+                                                try {
+                                                    await fetch(`/api/appointments/${a.id}`, { method: "DELETE" });
+                                                    toast.success("Cita cancelada");
+                                                    setBotStep("greeting");
+                                                } catch {
+                                                    toast.error("Error al cancelar cita");
+                                                }
                                             }
                                         }} className="px-4 py-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-rose-500 hover:bg-rose-500 hover:text-white transition-all"><Trash2 size={14}/></button>
                                     </div>
@@ -1640,15 +1723,19 @@ export default function App() {
                                     <p className="text-xs font-serif text-spa-crema">Nuevo Horario:</p>
                                     <p className="text-lg font-serif text-spa-gold">{format(botRescheduleSlot, "EEEE d 'de' MMMM, HH:mm", { locale: es })}</p>
                                     <button onClick={async () => {
-                                        await fetch(`/api/bot/appointments/${botData.selectedApptId}/reschedule`, {
-                                            method: "POST",
-                                            headers: { "Content-Type": "application/json" },
-                                            body: JSON.stringify({ newStartTime: botRescheduleSlot.toISOString() })
-                                        });
-                                        toast.success("Cita reprogramada");
-                                        fetchAppointments();
-                                        setBotStep("greeting");
-                                        setBotRescheduleSlot(null);
+                                        try {
+                                            await fetch(`/api/bot/appointments/${botData.selectedApptId}/reschedule`, {
+                                                method: "POST",
+                                                headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify({ newStartTime: botRescheduleSlot.toISOString() })
+                                            });
+                                            toast.success("Cita reprogramada");
+                                            fetchAppointments();
+                                            setBotStep("greeting");
+                                            setBotRescheduleSlot(null);
+                                        } catch {
+                                            toast.error("Error al reprogramar cita");
+                                        }
                                     }} className="w-full py-4 bg-spa-gold text-spa-base rounded-2xl text-[10px] font-bold uppercase tracking-widest shadow-xl">Confirmar Cambio</button>
                                 </div>
                             ) : (
@@ -1718,8 +1805,9 @@ export default function App() {
               </motion.div>
             </>
           )}
-        </AnimatePresence>
+         </AnimatePresence>
       </div>
     </div>
+    </ErrorBoundary>
   );
 }

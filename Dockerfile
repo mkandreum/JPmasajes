@@ -27,6 +27,7 @@ COPY --from=builder /app/package*.json ./
 
 # Copiamos node_modules para que server.ts pueda arrancar sin problemas (incluye vite que es dinámico/estático dependiendo del entorno)
 COPY --from=builder /app/node_modules ./node_modules
+RUN npm prune --omit=dev
 
 # Copiar el build de frontend
 COPY --from=builder /app/dist ./dist
@@ -35,6 +36,8 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/server.ts ./
 
 EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
 
 # Iniciar servidor con flags nativas de Typescript de NodeJS 22+
 CMD ["npm", "start"]

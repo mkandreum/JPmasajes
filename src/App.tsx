@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Menu, User, Clock, ChevronLeft, ChevronRight, X, Calendar as CalendarIcon, Phone, Mail, Leaf, MessageCircle, Send, LogOut, Sun, Moon, Plus, Trash2, Eye, Check, Sparkles } from "lucide-react";
+import { Menu, User, Clock, ChevronLeft, ChevronRight, X, Calendar as CalendarIcon, Phone, Mail, Leaf, MessageCircle, Send, LogOut, Sun, Moon, Plus, Trash2, Eye, Check, Sparkles, Lock, Unlock } from "lucide-react";
 import { format, addDays, startOfToday, startOfMonth, endOfMonth, parseISO, isSameDay, setHours, setMinutes, isBefore, isAfter } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast, Toaster } from "sonner";
@@ -50,6 +50,8 @@ interface AppConfig {
   logoPosition: { x: number; y: number };
   massageTypes: { id: string; name: string; price: string; duration: string; description: string; intensity?: string }[];
   tagline?: string;
+  blockedDays: string[];
+  blockedShifts: { date: string; shift: "morning" | "afternoon" }[];
 }
 
 export default function App() {
@@ -64,7 +66,9 @@ export default function App() {
     address: "",
     logoUrl: "",
     logoPosition: { x: 50, y: 50 },
-    tagline: ""
+    tagline: "",
+    blockedDays: [],
+    blockedShifts: []
   });
   
   const [selectedDate, setSelectedDate] = useState<Date>(startOfToday());
@@ -266,6 +270,9 @@ export default function App() {
   const getAvailableSlots = (shift: "morning" | "afternoon") => {
     const hours = shift === "morning" ? config.morningHours : config.afternoonHours;
     const now = new Date();
+    const dateStr = format(selectedDate, "yyyy-MM-dd");
+    if (config.blockedDays?.includes(dateStr)) return [];
+    if (config.blockedShifts?.some(b => b.date === dateStr && b.shift === shift)) return [];
     
     return hours.map(h => {
       const [hh, mm] = h.split(":").map(Number);
@@ -332,6 +339,39 @@ export default function App() {
       fetchAppointments();
     }
   };
+
+  const toggleDayBlock = async (date: Date) => {
+    const dateStr = format(date, "yyyy-MM-dd");
+    const current = config.blockedDays || [];
+    const newBlockedDays = current.includes(dateStr) ? current.filter(d => d !== dateStr) : [...current, dateStr];
+    try {
+      const res = await fetch("/api/app-config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ blockedDays: newBlockedDays })
+      });
+      if (res.ok) setConfig(await res.json());
+    } catch {}
+  };
+
+  const toggleShiftBlock = async (date: Date, shift: "morning" | "afternoon") => {
+    const dateStr = format(date, "yyyy-MM-dd");
+    const current = config.blockedShifts || [];
+    const idx = current.findIndex(b => b.date === dateStr && b.shift === shift);
+    const newBlockedShifts = idx >= 0 ? current.filter((_, i) => i !== idx) : [...current, { date: dateStr, shift }];
+    try {
+      const res = await fetch("/api/app-config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ blockedShifts: newBlockedShifts })
+      });
+      if (res.ok) setConfig(await res.json());
+    } catch {}
+  };
+
+  const isDayBlocked = (date: Date) => (config.blockedDays || []).includes(format(date, "yyyy-MM-dd"));
+  const isShiftBlocked = (date: Date, shift: "morning" | "afternoon") =>
+    (config.blockedShifts || []).some(b => b.date === format(date, "yyyy-MM-dd") && b.shift === shift);
 
   const handleResendEmail = async (appt: Appointment) => {
     try {
@@ -1047,13 +1087,19 @@ export default function App() {
                             const today = isSameDay(day, startOfToday());
                             const sel = selectedCalendarDay && isSameDay(day, selectedCalendarDay);
                             const appts = appointments.filter(a => isSameDay(parseISO(a.startTime), day));
+                            const dayBlocked = isDayBlocked(day);
+                            const mornBlocked = isShiftBlocked(day, "morning");
+                            const aftBlocked = isShiftBlocked(day, "afternoon");
                             return (
                               <button key={i} onClick={() => setSelectedCalendarDay(sel ? null : day)}
-                                className={cn("text-center py-1.5 rounded-lg transition-all", sel ? "bg-spa-gold text-spa-base" : today ? "bg-spa-accent/20" : "hover:bg-spa-accent/10")}
+                                className={cn("text-center py-1.5 rounded-lg transition-all relative", sel ? "bg-spa-gold text-spa-base" : today ? "bg-spa-accent/20" : "hover:bg-spa-accent/10", dayBlocked && "opacity-50")}
                               >
                                 <div className="text-[6px] font-bold uppercase tracking-wider opacity-60">{format(day, "EEEEE", { locale: es })}</div>
                                 <div className="text-[11px] font-bold">{format(day, "d")}</div>
-                                {appts.length > 0 && <div className="w-1 h-1 rounded-full bg-spa-gold mx-auto mt-0.5" />}
+                                <div className="flex justify-center gap-0.5 mt-0.5">
+                                  <span className={cn("w-1 h-1 rounded-full", mornBlocked ? "bg-rose-500" : appts.length > 0 ? "bg-spa-gold" : "bg-transparent")} />
+                                  <span className={cn("w-1 h-1 rounded-full", aftBlocked ? "bg-rose-500" : appts.length > 0 ? "bg-spa-gold" : "bg-transparent")} />
+                                </div>
                               </button>
                             );
                           })}
@@ -1061,11 +1107,13 @@ export default function App() {
                         <div className="mt-2 space-y-px">
                           {[...config.morningHours, ...config.afternoonHours].map(hour => {
                             const [hh, mm] = hour.split(":").map(Number);
+                            const isMorn = config.morningHours.includes(hour);
                             return (
-                              <div key={hour} className="grid grid-cols-[45px_repeat(7,1fr)] gap-px border-t border-white/5 py-0.5">
+                              <div key={hour} className={cn("grid grid-cols-[45px_repeat(7,1fr)] gap-px border-t border-white/5 py-0.5")}>
                                 <div className="text-[7px] text-[#7A7D7B] font-mono text-right pr-1.5 leading-8">{hour}</div>
                                 {Array.from({length: 7}, (_, i) => {
                                   const day = addDays(calendarMonth, i);
+                                  const slotBlocked = isDayBlocked(day) || (isMorn ? isShiftBlocked(day, "morning") : isShiftBlocked(day, "afternoon"));
                                   const appt = appointments.find(a =>
                                     isSameDay(parseISO(a.startTime), day) &&
                                     parseISO(a.startTime).getHours() === hh &&
@@ -1074,9 +1122,15 @@ export default function App() {
                                   return (
                                     <div key={i} className="min-h-[32px]">
                                       {appt ? (
-                                        <div onClick={() => { setViewingAppt(appt); setShowClientsPage(false); }} className="h-full bg-spa-accent/15 border border-spa-accent/30 rounded-md px-1.5 py-1 flex flex-col justify-center cursor-pointer hover:bg-spa-accent/25 transition-colors">
+                                        <div onClick={() => { setViewingAppt(appt); setShowClientsPage(false); }} className={cn("h-full bg-spa-accent/15 border border-spa-accent/30 rounded-md px-1.5 py-1 flex flex-col justify-center cursor-pointer hover:bg-spa-accent/25 transition-colors", slotBlocked && "opacity-50")}>
                                           <p className="text-[7px] font-bold text-spa-crema leading-tight truncate">{appt.clientName.split(" ")[0]}</p>
                                           <p className="text-[6px] text-[#B8BBB9] leading-tight truncate">{appt.massageType?.split(" ").slice(0,2).join(" ") || "Masaje"}</p>
+                                        </div>
+                                      ) : slotBlocked ? (
+                                        <div className="h-full flex items-center justify-center">
+                                          <div className="w-full h-full bg-rose-500/5 border border-rose-500/10 rounded-md flex items-center justify-center">
+                                            <Lock size={8} className="text-rose-500/40" />
+                                          </div>
                                         </div>
                                       ) : null}
                                     </div>
@@ -1089,9 +1143,22 @@ export default function App() {
                       </div>
                     </div>
                     {selectedCalendarDay && (
-                      <div className="text-center text-[8px] text-spa-gold font-bold uppercase tracking-widest">
-                        {format(selectedCalendarDay, "EEEE d 'de' MMMM", { locale: es })} — {appointments.filter(a => isSameDay(parseISO(a.startTime), selectedCalendarDay)).length} cita(s)
-                      </div>
+                      <>
+                        <div className="text-center text-[8px] text-spa-gold font-bold uppercase tracking-widest">
+                          {format(selectedCalendarDay, "EEEE d 'de' MMMM", { locale: es })} — {appointments.filter(a => isSameDay(parseISO(a.startTime), selectedCalendarDay)).length} cita(s)
+                        </div>
+                        <div className="flex justify-center gap-2 mt-1.5">
+                          <button onClick={() => toggleDayBlock(selectedCalendarDay)} className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[7px] font-bold uppercase tracking-wider transition-all", isDayBlocked(selectedCalendarDay) ? "bg-rose-500/15 border-rose-500/40 text-rose-400" : "bg-spa-elevated border-white/5 text-[#7A7D7B] hover:text-spa-crema")}>
+                            {isDayBlocked(selectedCalendarDay) ? <Lock size={10} /> : <Unlock size={10} />} Día
+                          </button>
+                          <button onClick={() => toggleShiftBlock(selectedCalendarDay, "morning")} className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[7px] font-bold uppercase tracking-wider transition-all", isShiftBlocked(selectedCalendarDay, "morning") ? "bg-rose-500/15 border-rose-500/40 text-rose-400" : "bg-spa-elevated border-white/5 text-[#7A7D7B] hover:text-spa-crema")}>
+                            {isShiftBlocked(selectedCalendarDay, "morning") ? <Lock size={10} /> : <Unlock size={10} />} Mañana
+                          </button>
+                          <button onClick={() => toggleShiftBlock(selectedCalendarDay, "afternoon")} className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[7px] font-bold uppercase tracking-wider transition-all", isShiftBlocked(selectedCalendarDay, "afternoon") ? "bg-rose-500/15 border-rose-500/40 text-rose-400" : "bg-spa-elevated border-white/5 text-[#7A7D7B] hover:text-spa-crema")}>
+                            {isShiftBlocked(selectedCalendarDay, "afternoon") ? <Lock size={10} /> : <Unlock size={10} />} Tarde
+                          </button>
+                        </div>
+                      </>
                     )}
                   </div>
 

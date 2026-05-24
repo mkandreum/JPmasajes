@@ -25,7 +25,9 @@ db.exec(`
     address TEXT DEFAULT '',
     logoUrl TEXT DEFAULT '',
     logoPosition TEXT DEFAULT '{"x":50,"y":50}',
-    tagline TEXT DEFAULT 'La energía que fluye'
+    tagline TEXT DEFAULT 'La energía que fluye',
+    blockedDays TEXT DEFAULT '[]',
+    blockedShifts TEXT DEFAULT '[]'
   );
 
   CREATE TABLE IF NOT EXISTS appointments (
@@ -168,7 +170,9 @@ async function startServer() {
       address: row.address || "",
       logoUrl: row.logoUrl || "",
       logoPosition,
-      tagline: row.tagline || "La energía que fluye"
+      tagline: row.tagline || "La energía que fluye",
+      blockedDays: row.blockedDays ? JSON.parse(row.blockedDays) : [],
+      blockedShifts: row.blockedShifts ? JSON.parse(row.blockedShifts) : []
     };
   };
 
@@ -297,10 +301,10 @@ async function startServer() {
   });
 
   app.put("/api/app-config", (req, res) => {
-    const { bannerUrl, morningHours, afternoonHours, massageTypes, address, logoUrl, logoPosition, tagline } = req.body;
+    const { bannerUrl, morningHours, afternoonHours, massageTypes, address, logoUrl, logoPosition, tagline, blockedDays, blockedShifts } = req.body;
     const current = getConfig();
     
-    db.prepare("UPDATE config SET bannerUrl = ?, morningHours = ?, afternoonHours = ?, massageTypes = ?, address = ?, logoUrl = ?, logoPosition = ?, tagline = ? WHERE id = 1")
+    db.prepare("UPDATE config SET bannerUrl = ?, morningHours = ?, afternoonHours = ?, massageTypes = ?, address = ?, logoUrl = ?, logoPosition = ?, tagline = ?, blockedDays = ?, blockedShifts = ? WHERE id = 1")
       .run(
         bannerUrl || current.bannerUrl,
         morningHours ? JSON.stringify(morningHours) : JSON.stringify(current.morningHours),
@@ -309,7 +313,9 @@ async function startServer() {
         address !== undefined ? address : (current.address || ""),
         logoUrl !== undefined ? logoUrl : (current.logoUrl || ""),
         logoPosition ? JSON.stringify(logoPosition) : JSON.stringify(current.logoPosition),
-        tagline !== undefined ? tagline : (current.tagline || "La energía que fluye")
+        tagline !== undefined ? tagline : (current.tagline || "La energía que fluye"),
+        blockedDays ? JSON.stringify(blockedDays) : JSON.stringify(current.blockedDays || []),
+        blockedShifts ? JSON.stringify(blockedShifts) : JSON.stringify(current.blockedShifts || [])
       );
     
     res.json(getConfig());

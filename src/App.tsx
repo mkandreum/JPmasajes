@@ -1271,22 +1271,35 @@ export default function App() {
                       ) : (
                         <div className="space-y-2">
                           {upcoming.map(appt => (
-                            <div key={appt.id} className="bg-spa-elevated px-4 py-3 rounded-xl border border-white/5 flex items-center justify-between gap-3">
+                            <div key={appt.id} className="bg-spa-card px-4 py-4 rounded-xl border border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-3.5">
+                              {/* Left Side: Time and Client Details */}
                               <div className="flex items-center gap-3">
-                                <div className="text-center min-w-[40px]">
-                                  <p className="text-lg font-serif text-spa-gold">{format(parseISO(appt.startTime), "HH:mm")}</p>
-                                  <p className="text-[7px] text-[#7A7D7B] uppercase">{format(parseISO(appt.startTime), "d MMM", { locale: es })}</p>
+                                <div className="text-center min-w-[50px] shrink-0 bg-spa-elevated py-1.5 px-2 rounded-lg border border-white/5">
+                                  <p className="text-base font-bold font-serif text-spa-gold leading-none">{format(parseISO(appt.startTime), "HH:mm")}</p>
+                                  <p className="text-[7px] text-[#7A7D7B] uppercase mt-1 leading-none">{format(parseISO(appt.startTime), "d MMM", { locale: es })}</p>
                                 </div>
-                                <div>
-                                  <p className="text-sm font-medium">{appt.clientName}</p>
-                                  <p className="text-[9px] text-[#7A7D7B]">{appt.massageType || "Masaje"} • {appt.clientEmail}</p>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-semibold text-spa-crema truncate leading-snug">{appt.clientName}</p>
+                                  <p className="text-[9px] text-[#7A7D7B] truncate leading-normal mt-0.5">{appt.massageType || "Masaje"} • {appt.clientEmail}</p>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-1 shrink-0">
-                                <span className={`px-1.5 py-0.5 rounded-md text-[7px] font-bold uppercase tracking-wider border ${getStatusInfo(appt.status).className}`}>{getStatusInfo(appt.status).label}</span>
-                                <button onClick={() => { setEmailAppointment(appt); setShowEmailModal(true); }} className="px-2 py-1.5 rounded-lg text-[8px] font-bold uppercase tracking-widest bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white transition-all" title="Correo"><Mail size={11} className="inline mr-0.5" />Email</button>
-                                <button onClick={() => handleAddToCalendar(appt)} className="px-2 py-1.5 rounded-lg text-[8px] font-bold uppercase tracking-widest bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all" title="Calendario"><CalendarIcon size={11} className="inline mr-0.5" />Cal</button>
-                                <button onClick={() => { setViewingAppt(appt); setShowClientsPage(false); }} className="px-2 py-1.5 rounded-lg text-[8px] font-bold uppercase tracking-widest bg-spa-accent/10 text-spa-gold hover:bg-spa-accent hover:text-spa-base transition-all"><Eye size={11} className="inline mr-0.5" />Ver</button>
+
+                              {/* Right Side: Status Badge and Actions */}
+                              <div className="flex flex-wrap items-center justify-between md:justify-end gap-2 pt-2 md:pt-0 border-t border-white/5 md:border-t-0 shrink-0">
+                                <span className={`px-2 py-0.5 rounded-full text-[6px] font-bold uppercase tracking-wider border shrink-0 ${getStatusInfo(appt.status).className}`}>
+                                  {getStatusInfo(appt.status).label}
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <button onClick={() => { setEmailAppointment(appt); setShowEmailModal(true); }} className="px-2.5 py-1.5 rounded-lg text-[8px] font-bold uppercase tracking-wider bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white transition-all flex items-center gap-1" title="Correo">
+                                    <Mail size={11} /> <span>Email</span>
+                                  </button>
+                                  <button onClick={() => handleAddToCalendar(appt)} className="px-2.5 py-1.5 rounded-lg text-[8px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all flex items-center gap-1" title="Calendario">
+                                    <CalendarIcon size={11} /> <span>Cal</span>
+                                  </button>
+                                  <button onClick={() => { setViewingAppt(appt); setShowClientsPage(false); }} className="px-2.5 py-1.5 rounded-lg text-[8px] font-bold uppercase tracking-wider bg-spa-accent/10 text-spa-gold hover:bg-spa-accent hover:text-spa-base transition-all flex items-center gap-1">
+                                    <Eye size={11} /> <span>Ver</span>
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -1302,7 +1315,7 @@ export default function App() {
                       const allAppts = [...appointments].sort((a,b) => parseISO(a.startTime).getTime() - parseISO(b.startTime).getTime());
                       const getPrice = (appt: any) => {
                         if (appt.price) { const n = parseFloat(appt.price.replace(/[€$,]/g, "")); if (!isNaN(n)) return n; }
-                        const m = config.massageTypes.find(t => t.name === appt.massageType);
+                        const m = (config.massageTypes || []).find(t => t.name === appt.massageType);
                         return m?.price ? parseFloat(m.price.replace(/[€$,]/g, "")) : 0;
                       };
                       const ingresos = appointments.reduce((t, a) => t + getPrice(a), 0);
@@ -1310,16 +1323,16 @@ export default function App() {
                       const pendientes = appointments.length - pasadas;
                       return (
                         <>
-                          <div className="grid grid-cols-3 gap-3">
-                            <div className="bg-spa-elevated p-4 rounded-xl border border-white/5">
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            <div className="bg-spa-elevated p-4 rounded-xl border border-white/5 col-span-2 sm:col-span-1">
                               <p className="text-[9px] text-[#7A7D7B] font-bold uppercase mb-1">Ingresos Totales</p>
                               <p className="text-xl font-serif text-spa-gold">{ingresos.toFixed(2)}€</p>
                             </div>
-                            <div className="bg-spa-elevated p-4 rounded-xl border border-white/5">
+                            <div className="bg-spa-elevated p-4 rounded-xl border border-white/5 col-span-1">
                               <p className="text-[9px] text-[#7A7D7B] font-bold uppercase mb-1">Completadas</p>
                               <p className="text-xl font-serif text-spa-crema">{pasadas}</p>
                             </div>
-                            <div className="bg-spa-elevated p-4 rounded-xl border border-white/5">
+                            <div className="bg-spa-elevated p-4 rounded-xl border border-white/5 col-span-1">
                               <p className="text-[9px] text-[#7A7D7B] font-bold uppercase mb-1">Pendientes</p>
                               <p className="text-xl font-serif text-spa-gold">{pendientes}</p>
                             </div>
@@ -1329,21 +1342,25 @@ export default function App() {
                               const isPast = isBefore(parseISO(appt.startTime), new Date());
                               const price = getPrice(appt);
                               return (
-                                <div key={appt.id} className="bg-spa-elevated px-4 py-3 rounded-xl border border-white/5 flex items-center justify-between gap-3 group">
+                                <div key={appt.id} className="bg-spa-elevated px-4 py-4 rounded-xl border border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-3 group">
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate">{appt.clientName}</p>
-                                    <p className="text-[9px] text-[#7A7D7B] truncate mt-0.5">
+                                    <p className="text-sm font-medium truncate text-spa-crema">{appt.clientName}</p>
+                                    <p className="text-[9px] text-[#7A7D7B] truncate mt-1">
                                       {format(parseISO(appt.startTime), "d MMM yyyy", { locale: es })} • {appt.massageType || "Sin tipo"}
-                                      {(() => { const mt = config.massageTypes.find(t => t.name === appt.massageType); return mt?.intensity ? <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[7px] font-bold uppercase border ${getIntensityInfo(mt.intensity).className}`}>{getIntensityInfo(mt.intensity).label}</span> : null; })()}
+                                      {(() => { const mt = (config.massageTypes || []).find(t => t.name === appt.massageType); return mt?.intensity ? <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[6px] font-bold uppercase border ${getIntensityInfo(mt.intensity).className}`}>{getIntensityInfo(mt.intensity).label}</span> : null; })()}
                                       {isPast && <span className="ml-1 text-emerald-500">✓</span>}
                                     </p>
                                   </div>
-                                  <div className="flex items-center gap-1 shrink-0">
-                                    <span className={`px-1.5 py-0.5 rounded-md text-[7px] font-bold uppercase tracking-wider border ${getStatusInfo(appt.status).className}`}>{getStatusInfo(appt.status).label}</span>
-                                    <button onClick={() => { setEmailAppointment(appt); setShowEmailModal(true); }} className="p-1.5 bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white rounded-lg transition-all" title="Correo"><Mail size={13}/></button>
-                                    <button onClick={() => handleAddToCalendar(appt)} className="p-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white rounded-lg transition-all" title="Calendario"><CalendarIcon size={13}/></button>
-                                    <span className="text-xs font-bold text-spa-gold mx-0.5">{price > 0 ? `${price.toFixed(2)}€` : "—"}</span>
-                                    <button onClick={() => handleAdminDelete(appt)} className="p-1.5 bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white rounded-lg transition-all"><Trash2 size={13}/></button>
+                                  <div className="flex flex-wrap items-center justify-between md:justify-end gap-2 pt-2 md:pt-0 border-t border-white/5 md:border-t-0 shrink-0">
+                                    <span className={`px-1.5 py-0.5 rounded-md text-[6px] font-bold uppercase tracking-wider border shrink-0 ${getStatusInfo(appt.status).className}`}>
+                                      {getStatusInfo(appt.status).label}
+                                    </span>
+                                    <div className="flex items-center gap-1.5">
+                                      <button onClick={() => { setEmailAppointment(appt); setShowEmailModal(true); }} className="p-1.5 bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white rounded-lg transition-all" title="Correo"><Mail size={12}/></button>
+                                      <button onClick={() => handleAddToCalendar(appt)} className="p-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white rounded-lg transition-all" title="Calendario"><CalendarIcon size={12}/></button>
+                                      <span className="text-xs font-bold text-spa-gold mx-1 shrink-0">{price > 0 ? `${price.toFixed(2)}€` : "—"}</span>
+                                      <button onClick={() => handleAdminDelete(appt)} className="p-1.5 bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white rounded-lg transition-all"><Trash2 size={12}/></button>
+                                    </div>
                                   </div>
                                 </div>
                               );

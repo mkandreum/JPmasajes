@@ -128,6 +128,8 @@ export default function App() {
   const [emailTemplate, setEmailTemplate] = useState("reminder");
   const [emailCustomText, setEmailCustomText] = useState("");
   const [showEmailCustomInput, setShowEmailCustomInput] = useState(false);
+  const [historyFilterStatus, setHistoryFilterStatus] = useState<string>("all");
+  const [historySearchQuery, setHistorySearchQuery] = useState<string>("");
   
   // Parallax Effect
   const heroRef = useRef(null);
@@ -1310,9 +1312,43 @@ export default function App() {
 
                   {/* Historial e Ingresos */}
                   <div className="space-y-4">
-                    <h3 className="text-[11px] font-bold text-spa-gold uppercase tracking-[0.4em]">Historial e Ingresos</h3>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <h3 className="text-[11px] font-bold text-spa-gold uppercase tracking-[0.4em]">Historial e Ingresos</h3>
+                      <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto shrink-0">
+                        <input
+                          type="text"
+                          placeholder="Buscar cliente, email o masaje..."
+                          value={historySearchQuery}
+                          onChange={(e) => setHistorySearchQuery(e.target.value)}
+                          className="h-8 bg-spa-elevated border border-white/5 rounded-xl px-3 outline-none focus:border-spa-gold text-[10px] text-spa-crema placeholder-[#7A7D7B] w-full sm:w-44 transition-colors"
+                        />
+                        <select
+                          value={historyFilterStatus}
+                          onChange={(e) => setHistoryFilterStatus(e.target.value)}
+                          className="h-8 bg-spa-elevated border border-white/5 rounded-xl px-3 outline-none focus:border-spa-gold text-[10px] text-spa-crema w-full sm:w-32 transition-colors cursor-pointer"
+                        >
+                          <option value="all">Todos los estados</option>
+                          <option value="pending">Pendientes</option>
+                          <option value="attending">Asistirá</option>
+                          <option value="rescheduled">Reagendadas</option>
+                          <option value="cancelled">Canceladas</option>
+                        </select>
+                      </div>
+                    </div>
+
                     {(() => {
-                      const allAppts = [...appointments].sort((a,b) => parseISO(a.startTime).getTime() - parseISO(b.startTime).getTime());
+                      const allAppts = [...appointments]
+                        .filter(appt => {
+                          const matchesStatus = historyFilterStatus === "all" || appt.status === historyFilterStatus;
+                          const matchesSearch = 
+                            appt.clientName.toLowerCase().includes(historySearchQuery.toLowerCase()) ||
+                            (appt.clientEmail || "").toLowerCase().includes(historySearchQuery.toLowerCase()) ||
+                            (appt.clientPhone || "").includes(historySearchQuery) ||
+                            (appt.massageType || "").toLowerCase().includes(historySearchQuery.toLowerCase());
+                          return matchesStatus && matchesSearch;
+                        })
+                        .sort((a,b) => parseISO(b.startTime).getTime() - parseISO(a.startTime).getTime());
+
                       const getPrice = (appt: any) => {
                         if (appt.price) { const n = parseFloat(appt.price.replace(/[€$,]/g, "")); if (!isNaN(n)) return n; }
                         const m = (config.massageTypes || []).find(t => t.name === appt.massageType);
@@ -1337,34 +1373,40 @@ export default function App() {
                               <p className="text-xl font-serif text-spa-gold">{pendientes}</p>
                             </div>
                           </div>
-                          <div className="space-y-2 max-h-60 overflow-y-auto no-scrollbar">
-                            {allAppts.slice(0, 30).map(appt => {
-                              const isPast = isBefore(parseISO(appt.startTime), new Date());
-                              const price = getPrice(appt);
-                              return (
-                                <div key={appt.id} className="bg-spa-elevated px-4 py-4 rounded-xl border border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-3 group">
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate text-spa-crema">{appt.clientName}</p>
-                                    <p className="text-[9px] text-[#7A7D7B] truncate mt-1">
-                                      {format(parseISO(appt.startTime), "d MMM yyyy", { locale: es })} • {appt.massageType || "Sin tipo"}
-                                      {(() => { const mt = (config.massageTypes || []).find(t => t.name === appt.massageType); return mt?.intensity ? <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[6px] font-bold uppercase border ${getIntensityInfo(mt.intensity).className}`}>{getIntensityInfo(mt.intensity).label}</span> : null; })()}
-                                      {isPast && <span className="ml-1 text-emerald-500">✓</span>}
-                                    </p>
-                                  </div>
-                                  <div className="flex flex-wrap items-center justify-between md:justify-end gap-2 pt-2 md:pt-0 border-t border-white/5 md:border-t-0 shrink-0">
-                                    <span className={`px-1.5 py-0.5 rounded-md text-[6px] font-bold uppercase tracking-wider border shrink-0 ${getStatusInfo(appt.status).className}`}>
-                                      {getStatusInfo(appt.status).label}
-                                    </span>
-                                    <div className="flex items-center gap-1.5">
-                                      <button onClick={() => { setEmailAppointment(appt); setShowEmailModal(true); }} className="p-1.5 bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white rounded-lg transition-all" title="Correo"><Mail size={12}/></button>
-                                      <button onClick={() => handleAddToCalendar(appt)} className="p-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white rounded-lg transition-all" title="Calendario"><CalendarIcon size={12}/></button>
-                                      <span className="text-xs font-bold text-spa-gold mx-1 shrink-0">{price > 0 ? `${price.toFixed(2)}€` : "—"}</span>
-                                      <button onClick={() => handleAdminDelete(appt)} className="p-1.5 bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white rounded-lg transition-all"><Trash2 size={12}/></button>
+                          <div className="space-y-2">
+                            {allAppts.length === 0 ? (
+                              <div className="bg-spa-elevated border border-white/5 rounded-2xl p-6 text-center">
+                                <p className="text-sm text-[#7A7D7B]">No se encontraron citas que coincidan con la búsqueda</p>
+                              </div>
+                            ) : (
+                              allAppts.slice(0, 50).map(appt => {
+                                const isPast = isBefore(parseISO(appt.startTime), new Date());
+                                const price = getPrice(appt);
+                                return (
+                                  <div key={appt.id} className="bg-spa-elevated px-4 py-4 rounded-xl border border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-3 group">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium truncate text-spa-crema">{appt.clientName}</p>
+                                      <p className="text-[9px] text-[#7A7D7B] truncate mt-1">
+                                        {format(parseISO(appt.startTime), "d MMM yyyy", { locale: es })} • {appt.massageType || "Sin tipo"}
+                                        {(() => { const mt = (config.massageTypes || []).find(t => t.name === appt.massageType); return mt?.intensity ? <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[6px] font-bold uppercase border ${getIntensityInfo(mt.intensity).className}`}>{getIntensityInfo(mt.intensity).label}</span> : null; })()}
+                                        {isPast && <span className="ml-1 text-emerald-500">✓</span>}
+                                      </p>
+                                    </div>
+                                    <div className="flex flex-wrap items-center justify-between md:justify-end gap-2 pt-2 md:pt-0 border-t border-white/5 md:border-t-0 shrink-0">
+                                      <span className={`px-1.5 py-0.5 rounded-md text-[6px] font-bold uppercase tracking-wider border shrink-0 ${getStatusInfo(appt.status).className}`}>
+                                        {getStatusInfo(appt.status).label}
+                                      </span>
+                                      <div className="flex items-center gap-1.5">
+                                        <button onClick={() => { setEmailAppointment(appt); setShowEmailModal(true); }} className="p-1.5 bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white rounded-lg transition-all" title="Correo"><Mail size={12}/></button>
+                                        <button onClick={() => handleAddToCalendar(appt)} className="p-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white rounded-lg transition-all" title="Calendario"><CalendarIcon size={12}/></button>
+                                        <span className="text-xs font-bold text-spa-gold mx-1 shrink-0">{price > 0 ? `${price.toFixed(2)}€` : "—"}</span>
+                                        <button onClick={() => handleAdminDelete(appt)} className="p-1.5 bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white rounded-lg transition-all"><Trash2 size={12}/></button>
+                                      </div>
                                     </div>
                                   </div>
-                                </div>
-                              );
-                            })}
+                                );
+                              })
+                            )}
                           </div>
                         </>
                       );

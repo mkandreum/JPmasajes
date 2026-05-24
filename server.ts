@@ -62,8 +62,28 @@ const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GE
 
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || "";
 
-// Session store (in-memory)
-const sessions = new Map<string, { email: string }>();
+// Session store (SQLite persistent)
+const sessions = {
+  has: (sid: string): boolean => {
+    if (!db) return false;
+    const row = db.prepare("SELECT 1 FROM sessions WHERE id = ?").get(sid);
+    return !!row;
+  },
+  get: (sid: string): { email: string } | undefined => {
+    if (!db) return undefined;
+    const row = db.prepare("SELECT email FROM sessions WHERE id = ?").get(sid) as { email: string } | undefined;
+    return row;
+  },
+  set: (sid: string, data: { email: string }) => {
+    if (!db) return;
+    db.prepare("INSERT OR REPLACE INTO sessions (id, email, createdAt) VALUES (?, ?, ?)")
+      .run(sid, data.email, new Date().toISOString());
+  },
+  delete: (sid: string) => {
+    if (!db) return;
+    db.prepare("DELETE FROM sessions WHERE id = ?").run(sid);
+  }
+};
 const parseCookies = (cookieHeader?: string): Record<string, string> => {
   const cookies: Record<string, string> = {};
   if (!cookieHeader) return cookies;
@@ -162,6 +182,12 @@ async function startServer() {
     CREATE TABLE IF NOT EXISTS admin_auth (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       tokens TEXT -- JSON string
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      email TEXT,
+      createdAt TEXT
     );
   `);
 

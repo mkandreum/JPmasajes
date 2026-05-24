@@ -35,7 +35,7 @@ interface Appointment {
 }
 
 
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
 const APP_URL = process.env.APP_URL || `http://localhost:${PORT}`;

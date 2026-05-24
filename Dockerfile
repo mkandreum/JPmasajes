@@ -5,6 +5,7 @@ WORKDIR /app
 
 # Instalar todas las dependencias
 COPY package*.json ./
+RUN apk add --no-cache python3 make g++
 RUN npm ci
 
 # Copiar el código fuente y compilar (frontend Vite)

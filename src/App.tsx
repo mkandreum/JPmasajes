@@ -144,16 +144,17 @@ export default function App() {
     const now = new Date();
     if (now.getHours() >= 14) setActiveShift("afternoon");
     
-    // Check server-side session
+    // Check server-side session (single source of truth for admin auth)
     fetch("/api/auth/session")
       .then(r => r.json())
       .then(session => {
         if (cancelled) return;
         if (session.authenticated) {
           setIsAdminAuth(true);
-          localStorage.setItem("isAdmin", "true");
-        } else {
-          localStorage.removeItem("isAdmin");
+          if (window.location.search.includes("admin=true")) {
+            window.history.replaceState({}, document.title, "/");
+            toast.success("Modo Administrador Activo");
+          }
         }
       })
       .catch(() => {});
@@ -163,14 +164,6 @@ export default function App() {
       .then(d => {
         if (cancelled) return;
         setHasCreds(d.hasCredentials);
-        if (window.location.search.includes("admin=true") || localStorage.getItem("isAdmin") === "true") {
-           setIsAdminAuth(true);
-           localStorage.setItem("isAdmin", "true");
-           if (window.location.search.includes("admin=true")) {
-             window.history.replaceState({}, document.title, "/");
-             toast.success("Modo Administrador Activo");
-           }
-        }
 
         // Handle Manage Token
         const params = new URLSearchParams(window.location.search);
@@ -334,7 +327,6 @@ export default function App() {
 
   const handleLogout = async () => {
     try { await fetch("/api/auth/logout", { method: "POST" }); } catch {}
-    localStorage.removeItem("isAdmin");
     setIsAdminAuth(false);
     setShowAdminPanel(false);
     toast.success("Sesión cerrada");

@@ -138,7 +138,7 @@ export default function App() {
 
   // Bot State
   const [showBot, setShowBot] = useState(false);
-  const [botStep, setBotStep] = useState<"greeting"|"ask_email"|"ask_verification"|"show_appointments"|"reschedule">("greeting");
+  const [botStep, setBotStep] = useState<"greeting"|"ask_email"|"ask_verification"|"show_appointments"|"reschedule"|"massages"|"info"|"faq"|"contact">("greeting");
   const [botData, setBotData] = useState({ email: "", verification: "", appts: [] as Appointment[], selectedApptId: "" });
   const [botRescheduleSlot, setBotRescheduleSlot] = useState<Date|null>(null);
 
@@ -1686,20 +1686,155 @@ export default function App() {
                           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-spa-gold to-spa-accent flex items-center justify-center text-spa-base font-serif text-lg font-bold">JP</div>
                           <div>
                              <h3 className="text-xs font-bold uppercase tracking-widest">Asistente</h3>
-                             <p className="text-[9px] text-spa-gold font-medium">Agente IA</p>
+                             <p className="text-[9px] text-spa-gold font-medium">Asistente Virtual</p>
                           </div>
                       </div>
                       <button onClick={()=>setShowBot(false)} className="p-2 text-[#7A7D7B] hover:text-spa-crema"><X size={18}/></button>
                   </div>
                   <div className="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar">
                       <div className="self-start max-w-[85%] bg-spa-elevated p-5 rounded-2xl rounded-tl-sm text-sm font-light leading-relaxed border border-white/5 relative">
-                          Bienvenido. Soy el asistente de Jean Pierre. ¿Cómo puedo ayudarte con tu reserva hoy?
+                          {botStep === "greeting" 
+                            ? "Hola, bienvenido. Soy el asistente de Jean Pierre. ¿Cómo puedo ayudarte hoy?" 
+                            : botStep === "massages" 
+                            ? "Aquí tienes los masajes y rituales disponibles en nuestro estudio de relajación:" 
+                            : botStep === "info" 
+                            ? "Esta es nuestra información de contacto físico, horarios y ubicación:" 
+                            : botStep === "faq" 
+                            ? "Aquí tienes respuestas a las preguntas más frecuentes sobre nuestras sesiones:" 
+                            : botStep === "contact"
+                            ? "¿Tienes dudas específicas o prefieres atención directa por WhatsApp? Contáctame:"
+                            : "Por favor, introduce los datos solicitados:"}
                           <div className="absolute top-0 -left-2 w-4 h-4 bg-spa-elevated clip-path-triangle" />
                       </div>
+
                       {botStep === "greeting" && (
-                          <div className="flex flex-col gap-3">
-                              <button onClick={() => setBotStep("ask_email")} className="w-full py-4 bg-spa-accent text-spa-crema rounded-2xl text-[10px] font-bold uppercase tracking-widest hover:bg-spa-gold hover:text-spa-base transition-all shadow-lg">Consultar / Cancelar Cita</button>
-                              <button onClick={() => { setShowBot(false); toast.info("Selecciona un día y hora en el calendario"); }} className="w-full py-4 bg-spa-elevated border border-white/5 text-spa-crema rounded-2xl text-[10px] font-bold uppercase tracking-widest hover:border-spa-gold transition-all">Nueva Reserva</button>
+                          <div className="flex flex-col gap-2.5">
+                              <button onClick={() => { setShowBot(false); toast.info("Selecciona un día y hora en el calendario de la web"); }} className="w-full py-3.5 bg-spa-accent text-spa-crema rounded-xl text-[9px] font-bold uppercase tracking-widest hover:bg-spa-gold hover:text-spa-base transition-all shadow-lg flex items-center justify-center gap-2">
+                                  📅 Reservar Nueva Cita
+                              </button>
+                              <button onClick={() => setBotStep("ask_email")} className="w-full py-3.5 bg-spa-elevated border border-white/5 text-spa-crema rounded-xl text-[9px] font-bold uppercase tracking-widest hover:border-spa-gold transition-all flex items-center justify-center gap-2">
+                                  🔍 Consultar / Cancelar / Reagendar
+                              </button>
+                              <button onClick={() => setBotStep("massages")} className="w-full py-3.5 bg-spa-elevated border border-white/5 text-spa-crema rounded-xl text-[9px] font-bold uppercase tracking-widest hover:border-spa-gold transition-all flex items-center justify-center gap-2">
+                                  🌿 Masajes y Precios
+                              </button>
+                              <button onClick={() => setBotStep("info")} className="w-full py-3.5 bg-spa-elevated border border-white/5 text-spa-crema rounded-xl text-[9px] font-bold uppercase tracking-widest hover:border-spa-gold transition-all flex items-center justify-center gap-2">
+                                  📍 Ubicación y Horarios
+                              </button>
+                              <button onClick={() => setBotStep("faq")} className="w-full py-3.5 bg-spa-elevated border border-white/5 text-spa-crema rounded-xl text-[9px] font-bold uppercase tracking-widest hover:border-spa-gold transition-all flex items-center justify-center gap-2">
+                                  💬 Preguntas Frecuentes (FAQ)
+                              </button>
+                              <button onClick={() => setBotStep("contact")} className="w-full py-3.5 bg-spa-elevated border border-white/5 text-spa-crema rounded-xl text-[9px] font-bold uppercase tracking-widest hover:border-spa-gold transition-all flex items-center justify-center gap-2">
+                                  📞 Hablar con Jean Pierre
+                              </button>
+                          </div>
+                      )}
+
+                      {botStep === "massages" && (
+                          <div className="space-y-4">
+                              <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1 no-scrollbar">
+                                  {(config.massageTypes || []).map((m: any) => (
+                                      <div key={m.id || m.name} className="bg-spa-elevated p-4 rounded-2xl border border-white/5 space-y-2 text-left">
+                                          <div className="flex justify-between items-start gap-2">
+                                              <p className="text-xs font-bold text-spa-crema">{m.name}</p>
+                                              <span className="text-xs font-serif text-spa-gold font-bold shrink-0">{m.price}</span>
+                                          </div>
+                                          <p className="text-[10px] text-[#7A7D7B] leading-relaxed">{m.description}</p>
+                                          <div className="flex justify-between items-center pt-1 text-[8px] text-spa-gold/70">
+                                              <span>⏱ Duración: {m.duration}</span>
+                                              {m.intensity && <span>⚡ Intensidad: {getIntensityInfo(m.intensity).label}</span>}
+                                          </div>
+                                          <button 
+                                              onClick={() => {
+                                                  setShowBot(false);
+                                                  toast.success(`Has seleccionado: ${m.name}. Elige una hora disponible en el calendario.`);
+                                              }} 
+                                              className="w-full mt-2 py-2 bg-spa-accent/10 border border-spa-accent/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-spa-gold hover:bg-spa-accent hover:text-spa-base transition-all cursor-pointer"
+                                          >
+                                              Reservar este masaje
+                                          </button>
+                                      </div>
+                                  ))}
+                              </div>
+                              <button onClick={() => setBotStep("greeting")} className="w-full py-3 bg-white/5 rounded-xl text-[9px] font-bold uppercase tracking-widest text-[#7A7D7B] hover:text-spa-crema transition-all cursor-pointer">← Volver al Menú</button>
+                          </div>
+                      )}
+
+                      {botStep === "info" && (
+                          <div className="space-y-4">
+                              <div className="bg-spa-elevated p-5 rounded-2xl border border-white/5 space-y-4 text-left">
+                                  <div>
+                                      <p className="text-[9px] text-[#7A7D7B] font-bold uppercase mb-1">📍 Dirección del Estudio</p>
+                                      <p className="text-xs text-spa-crema leading-relaxed">{config.address || "Dirección por definir"}</p>
+                                      {config.address && (
+                                          <a 
+                                              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(config.address)}`} 
+                                              target="_blank" 
+                                              rel="noreferrer"
+                                              className="inline-block mt-2 text-[9px] font-bold uppercase text-[#3B82F6] hover:underline"
+                                          >
+                                              📌 Ver en Google Maps →
+                                          </a>
+                                      )}
+                                  </div>
+                                  <div className="border-t border-white/5 pt-3">
+                                      <p className="text-[9px] text-[#7A7D7B] font-bold uppercase mb-1.5">⏰ Horarios de Apertura</p>
+                                      <p className="text-[10px] text-spa-crema leading-relaxed">
+                                          Nuestros turnos de masajes disponibles para reservas son:
+                                      </p>
+                                      <ul className="text-[9px] text-[#A0A3A1] space-y-1 mt-1.5 list-disc pl-4">
+                                          <li><strong>Turno Mañana:</strong> {config.morningHours?.length > 0 ? `${config.morningHours[0]} a ${config.morningHours[config.morningHours.length - 1]}` : "9:00 a 14:00"}</li>
+                                          <li><strong>Turno Tarde:</strong> {config.afternoonHours?.length > 0 ? `${config.afternoonHours[0]} a ${config.afternoonHours[config.afternoonHours.length - 1]}` : "15:00 a 21:00"}</li>
+                                      </ul>
+                                  </div>
+                              </div>
+                              <button onClick={() => setBotStep("greeting")} className="w-full py-3 bg-white/5 rounded-xl text-[9px] font-bold uppercase tracking-widest text-[#7A7D7B] hover:text-spa-crema transition-all cursor-pointer">← Volver al Menú</button>
+                          </div>
+                      )}
+
+                      {botStep === "faq" && (
+                          <div className="space-y-4">
+                              <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1 no-scrollbar text-left">
+                                  <div className="bg-spa-elevated p-4 rounded-2xl border border-white/5 space-y-1">
+                                      <p className="text-xs font-bold text-spa-gold">¿Con cuánto tiempo de antelación debo llegar?</p>
+                                      <p className="text-[10px] text-[#A0A3A1] leading-relaxed">Recomendamos llegar unos 5 o 10 minutos antes de la hora acordada para poder prepararte con total tranquilidad y disfrutar de la experiencia al completo.</p>
+                                  </div>
+                                  <div className="bg-spa-elevated p-4 rounded-2xl border border-white/5 space-y-1">
+                                      <p className="text-xs font-bold text-spa-gold">¿Cuál es la política de cancelación?</p>
+                                      <p className="text-[10px] text-[#A0A3A1] leading-relaxed">Puedes cancelar o reagendar tu cita sin ningún coste adicional hasta 24 horas antes del comienzo de la sesión. Se puede hacer directamente desde la web.</p>
+                                  </div>
+                                  <div className="bg-spa-elevated p-4 rounded-2xl border border-white/5 space-y-1">
+                                      <p className="text-xs font-bold text-spa-gold">¿Qué formas de pago tenéis?</p>
+                                      <p className="text-[10px] text-[#A0A3A1] leading-relaxed">Aceptamos pagos en efectivo, Bizum y tarjeta de crédito en el estudio una vez finalizada la sesión de masaje.</p>
+                                  </div>
+                              </div>
+                              <button onClick={() => setBotStep("greeting")} className="w-full py-3 bg-white/5 rounded-xl text-[9px] font-bold uppercase tracking-widest text-[#7A7D7B] hover:text-spa-crema transition-all cursor-pointer">← Volver al Menú</button>
+                          </div>
+                      )}
+
+                      {botStep === "contact" && (
+                          <div className="space-y-4">
+                              <div className="bg-spa-elevated p-5 rounded-2xl border border-white/5 space-y-4 text-center">
+                                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-500/20 to-emerald-500/10 flex items-center justify-center text-emerald-400 mx-auto border border-emerald-500/20">
+                                      <Send size={20} />
+                                  </div>
+                                  <div className="space-y-1">
+                                      <p className="text-sm font-serif text-spa-crema">Atención Directa por WhatsApp</p>
+                                      <p className="text-[10px] text-[#7A7D7B]">¿Tienes dudas especiales o prefieres agendar de forma manual? Contacta directamente por WhatsApp.</p>
+                                  </div>
+                                  <a 
+                                      href="https://wa.me/34623101111?text=Hola%20Jean%20Pierre,%20tengo%20una%20consulta%20sobre%20los%20masajes." 
+                                      target="_blank" 
+                                      rel="noreferrer"
+                                      className="inline-flex items-center justify-center gap-2 w-full py-4 bg-emerald-600 text-white rounded-2xl text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-500 transition-all shadow-lg cursor-pointer text-decoration-none"
+                                  >
+                                      💬 Abrir chat de WhatsApp
+                                  </a>
+                                  <p className="text-[8px] text-[#7A7D7B] mt-1">
+                                      Correo: jeanpierremassagestudio@gmail.com
+                                  </p>
+                              </div>
+                              <button onClick={() => setBotStep("greeting")} className="w-full py-3 bg-white/5 rounded-xl text-[9px] font-bold uppercase tracking-widest text-[#7A7D7B] hover:text-spa-crema transition-all cursor-pointer">← Volver al Menú</button>
                           </div>
                       )}
 
@@ -1730,12 +1865,12 @@ export default function App() {
                                               setBotStep("ask_verification");
                                           }
                                       }}
-                                      className="absolute right-2 top-2 w-10 h-10 bg-spa-accent rounded-xl flex items-center justify-center text-spa-crema hover:bg-spa-gold transition-all"
+                                      className="absolute right-2 top-2 w-10 h-10 bg-spa-accent rounded-xl flex items-center justify-center text-spa-crema hover:bg-spa-gold transition-all cursor-pointer"
                                   >
                                       <Send size={16} />
                                   </button>
                               </div>
-                              <button onClick={() => setBotStep("greeting")} className="text-[9px] text-[#7A7D7B] uppercase font-bold hover:text-spa-crema px-2">← Volver</button>
+                              <button onClick={() => setBotStep("greeting")} className="text-[9px] text-[#7A7D7B] uppercase font-bold hover:text-spa-crema px-2 cursor-pointer">← Volver</button>
                           </div>
                       )}
 
@@ -1759,12 +1894,12 @@ export default function App() {
                                           const el = document.getElementById("bot-verify-input") as HTMLInputElement;
                                           handleBotVerify(el.value);
                                       }}
-                                      className="absolute right-2 top-2 w-10 h-10 bg-spa-accent rounded-xl flex items-center justify-center text-spa-crema hover:bg-spa-gold transition-all"
+                                      className="absolute right-2 top-2 w-10 h-10 bg-spa-accent rounded-xl flex items-center justify-center text-spa-crema hover:bg-spa-gold transition-all cursor-pointer"
                                   >
                                       <Send size={16} />
                                   </button>
                               </div>
-                              <button onClick={() => setBotStep("ask_email")} className="text-[9px] text-[#7A7D7B] uppercase font-bold hover:text-spa-crema px-2">← Cambiar Email</button>
+                              <button onClick={() => setBotStep("ask_email")} className="text-[9px] text-[#7A7D7B] uppercase font-bold hover:text-spa-crema px-2 cursor-pointer">← Cambiar Email</button>
                           </div>
                       )}
 
@@ -1781,7 +1916,7 @@ export default function App() {
                                           <div className="px-2 py-1 bg-spa-accent/10 border border-spa-accent/20 rounded-md text-[8px] font-bold text-spa-gold uppercase tracking-tighter">Confirmada</div>
                                       </div>
                                       <div className="flex gap-2 pt-2">
-                                          <button onClick={() => { setBotData({...botData, selectedApptId: a.id!}); setBotStep("reschedule"); toast.info("Selecciona un nuevo horario disponible en el calendario"); }} className="flex-1 py-3 bg-spa-accent/10 border border-spa-accent/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-spa-gold hover:bg-spa-accent hover:text-spa-base transition-all">Reagendar</button>
+                                          <button onClick={() => { setBotData({...botData, selectedApptId: a.id!}); setBotStep("reschedule"); toast.info("Selecciona un nuevo horario disponible en el calendario"); }} className="flex-1 py-3 bg-spa-accent/10 border border-spa-accent/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-spa-gold hover:bg-spa-accent hover:text-spa-base transition-all cursor-pointer">Reagendar</button>
                                           <button onClick={async () => {
                                               if (confirm("¿Estás seguro de cancelar?")) {
                                                   try {
@@ -1792,11 +1927,11 @@ export default function App() {
                                                       toast.error("Error al cancelar cita");
                                                   }
                                               }
-                                          }} className="px-4 py-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-rose-500 hover:bg-rose-500 hover:text-white transition-all"><Trash2 size={14}/></button>
+                                          }} className="px-4 py-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-rose-500 hover:bg-rose-500 hover:text-white transition-all cursor-pointer"><Trash2 size={14}/></button>
                                       </div>
                                   </div>
                               ))}
-                              <button onClick={() => setBotStep("greeting")} className="w-full py-3 bg-white/5 rounded-xl text-[9px] font-bold uppercase tracking-widest text-[#7A7D7B] hover:text-spa-crema transition-all">Finalizar</button>
+                              <button onClick={() => setBotStep("greeting")} className="w-full py-3 bg-white/5 rounded-xl text-[9px] font-bold uppercase tracking-widest text-[#7A7D7B] hover:text-spa-crema transition-all cursor-pointer">Finalizar</button>
                           </div>
                       )}
                   </div>

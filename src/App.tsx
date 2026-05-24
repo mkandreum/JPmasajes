@@ -76,6 +76,7 @@ interface AppConfig {
   tagline?: string;
   blockedDays: string[];
   blockedShifts: { date: string; shift: "morning" | "afternoon" }[];
+  phone?: string;
 }
 
 export default function App() {
@@ -1082,6 +1083,24 @@ export default function App() {
                     </div>
 
                     <div className="space-y-2">
+                      <label className="text-[9px] font-bold text-spa-gold uppercase tracking-widest px-1">Teléfono de WhatsApp (Ej: 34623101111)</label>
+                      <div className="flex gap-2">
+                        <input 
+                          value={config.phone || ""} 
+                          onChange={e => setConfig(prev => ({ ...prev, phone: e.target.value.replace(/[^0-9]/g, "") }))} 
+                          placeholder="Código de país + número (ej. 34623101111)" 
+                          className="flex-1 h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm" 
+                        />
+                        <button 
+                          onClick={() => handleUpdateConfig({ ...config, phone: config.phone })} 
+                          className="px-5 h-11 rounded-xl bg-spa-gold text-spa-base text-[10px] font-bold uppercase tracking-widest hover:bg-spa-accent transition-all shrink-0"
+                        >
+                          <Check size={14} className="inline mr-1" />OK
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
                       <label className="text-[9px] font-bold text-spa-gold uppercase tracking-widest px-1">Logo del Estudio</label>
                       <div className="flex items-center gap-4">
                         <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-spa-gold/30 shrink-0 bg-spa-elevated flex items-center justify-center">
@@ -1823,7 +1842,7 @@ export default function App() {
                                       <p className="text-[10px] text-[#7A7D7B]">¿Tienes dudas especiales o prefieres agendar de forma manual? Contacta directamente por WhatsApp.</p>
                                   </div>
                                   <a 
-                                      href="https://wa.me/34623101111?text=Hola%20Jean%20Pierre,%20tengo%20una%20consulta%20sobre%20los%20masajes." 
+                                      href={`https://wa.me/${config.phone || "34623101111"}?text=Hola%20Jean%20Pierre,%20tengo%20una%20consulta%20sobre%20los%20masajes.`} 
                                       target="_blank" 
                                       rel="noreferrer"
                                       className="inline-flex items-center justify-center gap-2 w-full py-4 bg-emerald-600 text-white rounded-2xl text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-500 transition-all shadow-lg cursor-pointer text-decoration-none"

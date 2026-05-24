@@ -11,6 +11,15 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+const intensityOptions = [
+  { value: "baja", label: "Baja", className: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
+  { value: "media", label: "Media", className: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
+  { value: "alta", label: "Alta", className: "bg-rose-500/15 text-rose-400 border-rose-500/30" },
+];
+
+const getIntensityInfo = (intensity?: string) =>
+  intensityOptions.find(o => o.value === intensity) || { value: "", label: "—", className: "bg-white/5 text-[#7A7D7B] border-white/10" };
+
 interface Appointment {
   id?: string;
   clientName: string;
@@ -29,7 +38,7 @@ interface AppConfig {
   address: string;
   logoUrl: string;
   logoPosition: { x: number; y: number };
-  massageTypes: { id: string; name: string; price: string; duration: string; description: string }[];
+  massageTypes: { id: string; name: string; price: string; duration: string; description: string; intensity?: string }[];
 }
 
 export default function App() {
@@ -65,6 +74,7 @@ export default function App() {
     price: "",
     duration: "",
     description: "",
+    intensity: "",
   });
   const [infoModalMassage, setInfoModalMassage] = useState<{ name: string; description: string } | null>(null);
   const [editMassageId, setEditMassageId] = useState<string | null>(null);
@@ -179,7 +189,7 @@ export default function App() {
     if (editMassageId) {
       updatedTypes = config.massageTypes.map((m) =>
         m.id === editMassageId
-          ? { ...m, name: newMassage.name.trim(), price: newMassage.price.trim(), duration: newMassage.duration.trim(), description: newMassage.description.trim() }
+          ? { ...m, name: newMassage.name.trim(), price: newMassage.price.trim(), duration: newMassage.duration.trim(), description: newMassage.description.trim(), intensity: newMassage.intensity }
           : m
       );
     } else {
@@ -191,13 +201,14 @@ export default function App() {
           price: newMassage.price.trim(),
           duration: newMassage.duration.trim(),
           description: newMassage.description.trim(),
+          intensity: newMassage.intensity,
         },
       ];
     }
 
     await handleUpdateConfig({ ...config, massageTypes: updatedTypes });
     setEditMassageId(null);
-    setNewMassage({ name: "", price: "", duration: "", description: "" });
+    setNewMassage({ name: "", price: "", duration: "", description: "", intensity: "" });
   };
 
   const handleBotVerify = async (val: string) => {
@@ -591,7 +602,13 @@ export default function App() {
                                    )}
                                   >
                                     <div>
-                                      <p className="text-xs font-bold flex items-center gap-2"><Leaf size={12} className="text-spa-gold shrink-0" />{m.name}</p>
+                                      <p className="text-xs font-bold flex items-center gap-2"><Leaf size={12} className="text-spa-gold shrink-0" />{m.name}
+                                        {m.intensity && (
+                                          <span className={`px-1.5 py-0.5 rounded-md text-[6px] font-bold uppercase tracking-wider border ${getIntensityInfo(m.intensity).className}`}>
+                                            {getIntensityInfo(m.intensity).label}
+                                          </span>
+                                        )}
+                                      </p>
                                       <p className="text-[9px] opacity-60">{m.duration}</p>
                                     </div>
                                     <span className="text-xs font-bold text-spa-gold">{m.price}</span>
@@ -650,9 +667,18 @@ export default function App() {
                           <span className="text-[9px] font-bold text-spa-gold uppercase tracking-widest">Hora</span>
                           <span className="text-sm">{format(parseISO(viewingAppt.startTime), "HH:mm")}</span>
                         </div>
-                        <div className="flex justify-between">
+                        <div className="flex justify-between items-center">
                           <span className="text-[9px] font-bold text-spa-gold uppercase tracking-widest">Servicio</span>
-                          <span className="text-sm">{viewingAppt.massageType || 'No especificado'}</span>
+                          <span className="text-sm flex items-center gap-2">{viewingAppt.massageType || 'No especificado'}
+                            {(() => {
+                              const mt = config.massageTypes.find(t => t.name === viewingAppt.massageType);
+                              if (mt?.intensity) {
+                                const info = getIntensityInfo(mt.intensity);
+                                return <span className={`px-2 py-0.5 rounded-md text-[7px] font-bold uppercase tracking-wider border ${info.className}`}>{info.label}</span>;
+                              }
+                              return null;
+                            })()}
+                          </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-[9px] font-bold text-spa-gold uppercase tracking-widest">Duración</span>
@@ -817,7 +843,13 @@ export default function App() {
                           className="bg-spa-elevated p-4 rounded-xl border border-white/5 flex justify-between items-center group"
                         >
                           <div>
-                            <p className="text-sm font-bold">{m.name}</p>
+                            <p className="text-sm font-bold flex items-center gap-2">{m.name}
+                              {m.intensity && (
+                                <span className={`px-2 py-0.5 rounded-md text-[7px] font-bold uppercase tracking-wider border ${getIntensityInfo(m.intensity).className}`}>
+                                  {getIntensityInfo(m.intensity).label}
+                                </span>
+                              )}
+                            </p>
                             <p className="text-[10px] text-[#7A7D7B]">
                               {m.duration} • {m.price}
                             </p>
@@ -829,7 +861,7 @@ export default function App() {
                             <button
                               onClick={() => {
                                 setEditMassageId(m.id);
-                                setNewMassage({ name: m.name, price: m.price, duration: m.duration, description: m.description || "" });
+                                setNewMassage({ name: m.name, price: m.price, duration: m.duration, description: m.description || "", intensity: m.intensity || "" });
                               }}
                               className="p-2 text-[#7A7D7B] hover:text-spa-gold transition-colors"
                             >
@@ -885,6 +917,16 @@ export default function App() {
                         rows={3}
                         className="h-24 bg-spa-elevated border border-white/5 rounded-xl px-4 py-3 outline-none focus:border-spa-gold text-sm resize-none md:col-span-3"
                       />
+                      <select
+                        value={newMassage.intensity}
+                        onChange={(e) => setNewMassage((prev) => ({ ...prev, intensity: e.target.value }))}
+                        className="h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm md:col-span-3"
+                      >
+                        <option value="">Sin intensidad</option>
+                        {intensityOptions.map(o => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
                     </div>
 
                     <div className="flex gap-2">
@@ -1185,6 +1227,14 @@ export default function App() {
                                           locale: es,
                                         })}{" "}
                                         • {appt.massageType || "Sin tipo"}
+                                        {(() => {
+                                          const mt = config.massageTypes.find(t => t.name === appt.massageType);
+                                          if (mt?.intensity) {
+                                            const info = getIntensityInfo(mt.intensity);
+                                            return <span className={`ml-1.5 px-1.5 py-0.5 rounded-md text-[6px] font-bold uppercase tracking-wider border ${info.className}`}>{info.label}</span>;
+                                          }
+                                          return null;
+                                        })()}
                                         {appt.duration && ` • ${appt.duration}`}
                                         {isPast && <span className="ml-2 text-emerald-500">✓</span>}
                                       </p>
@@ -1268,7 +1318,14 @@ export default function App() {
                         className="bg-spa-elevated rounded-2xl border border-white/5 p-6 flex items-center justify-between gap-6 hover:border-spa-gold/40 hover:shadow-[0_0_30px_rgba(201,169,110,0.08)] hover:scale-[1.01] transition-all duration-300 group"
                       >
                         <div className="flex-1">
-                          <h3 className="text-lg font-serif text-spa-crema">{m.name}</h3>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-lg font-serif text-spa-crema">{m.name}</h3>
+                            {m.intensity && (
+                              <span className={`px-2 py-0.5 rounded-md text-[7px] font-bold uppercase tracking-wider border ${getIntensityInfo(m.intensity).className}`}>
+                                {getIntensityInfo(m.intensity).label}
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-4 mt-2">
                             <span className="text-sm font-bold text-spa-gold">{m.price}</span>
                             <span className="text-[10px] text-[#7A7D7B] uppercase tracking-widest">{m.duration}</span>
@@ -1283,7 +1340,7 @@ export default function App() {
                               <button
                                 onClick={() => {
                                   setEditMassageId(m.id);
-                                  setNewMassage({ name: m.name, price: m.price, duration: m.duration, description: m.description || "" });
+                                  setNewMassage({ name: m.name, price: m.price, duration: m.duration, description: m.description || "", intensity: m.intensity || "" });
                                 }}
                                 className="p-2 text-[#7A7D7B] hover:text-spa-gold transition-colors"
                                 title="Editar servicio"
@@ -1349,6 +1406,16 @@ export default function App() {
                             className="h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm"
                           />
                         </div>
+                        <select
+                          value={newMassage.intensity}
+                          onChange={(e) => setNewMassage((prev) => ({ ...prev, intensity: e.target.value }))}
+                          className="h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm"
+                        >
+                          <option value="">Sin intensidad</option>
+                          {intensityOptions.map(o => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
+                        </select>
                       </div>
                       <div className="flex gap-2">
                         <button
@@ -1557,33 +1624,51 @@ export default function App() {
           {showSideMenu && (
             <>
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowSideMenu(false)} className="absolute inset-0 z-[60] bg-black/60 backdrop-blur-md" />
-              <motion.div initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} className="absolute right-0 top-0 bottom-0 w-80 bg-spa-card z-[70] border-l border-white/10 p-6 sm:p-10 flex flex-col">
-                <div className="flex justify-between items-center mb-16">
-                   <span className="text-[10px] font-bold text-spa-gold uppercase tracking-[0.4em]">Menú</span>
-                   <button onClick={() => setShowSideMenu(false)}><X size={24}/></button>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.92, y: 30 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.92, y: 30 }}
+                transition={{ type: "spring", damping: 28, stiffness: 300 }}
+                className="absolute inset-0 z-[70] flex items-center justify-center p-8"
+              >
+                <div className="w-full max-w-[280px] bg-spa-card rounded-[28px] border border-white/10 shadow-2xl p-8 flex flex-col items-center gap-8">
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-spa-gold to-spa-accent flex items-center justify-center text-spa-base shadow-xl">
+                      <Leaf size={28} />
+                    </div>
+                    <span className="text-[9px] font-bold text-spa-gold uppercase tracking-[0.3em] mt-1">JP Masajes</span>
+                    <div className="h-px w-12 bg-spa-gold/30 mt-1" />
+                  </div>
+                  <div className="w-full space-y-3">
+                    <button onClick={() => { setShowSideMenu(false); setShowBot(true); }} className="w-full flex items-center gap-4 p-4 bg-spa-elevated rounded-2xl border border-white/5 hover:border-spa-gold/30 hover:bg-spa-accent/10 transition-all group">
+                      <div className="w-10 h-10 rounded-xl bg-spa-accent/10 flex items-center justify-center text-spa-gold group-hover:bg-spa-gold group-hover:text-spa-base transition-all shrink-0"><CalendarIcon size={18}/></div>
+                      <span className="text-sm font-medium">Gestionar Cita</span>
+                    </button>
+                    <button onClick={() => { setShowSideMenu(false); setShowServices(true); }} className="w-full flex items-center gap-4 p-4 bg-spa-elevated rounded-2xl border border-white/5 hover:border-spa-gold/30 hover:bg-spa-accent/10 transition-all group">
+                      <div className="w-10 h-10 rounded-xl bg-spa-accent/10 flex items-center justify-center text-spa-gold group-hover:bg-spa-gold group-hover:text-spa-base transition-all shrink-0"><Leaf size={18}/></div>
+                      <span className="text-sm font-medium">Servicios</span>
+                    </button>
+                    {isAdminAuth ? (
+                      <button onClick={() => { setShowSideMenu(false); setShowAdminPanel(true); }} className="w-full flex items-center gap-4 p-4 bg-spa-elevated rounded-2xl border border-white/5 hover:border-spa-gold/30 hover:bg-spa-accent/10 transition-all group">
+                        <div className="w-10 h-10 rounded-xl bg-spa-gold flex items-center justify-center text-spa-base shrink-0"><User size={18}/></div>
+                        <span className="text-sm font-medium">Administración</span>
+                      </button>
+                    ) : (
+                      <a href="/api/auth/google" className="w-full flex items-center gap-4 p-4 bg-spa-elevated rounded-2xl border border-white/5 hover:border-spa-gold/30 hover:bg-spa-accent/10 transition-all group">
+                        <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-spa-crema group-hover:bg-spa-gold group-hover:text-spa-base transition-all shrink-0"><User size={18}/></div>
+                        <span className="text-sm font-medium">Acceso Admin</span>
+                      </a>
+                    )}
+                  </div>
+                  {isAdminAuth && (
+                    <button onClick={handleLogout} className="flex items-center gap-3 text-rose-500 text-xs font-bold uppercase tracking-widest hover:text-rose-400 transition-all">
+                      <LogOut size={14}/> Cerrar Sesión
+                    </button>
+                  )}
+                  <button onClick={() => setShowSideMenu(false)} className="w-10 h-10 bg-white/5 border border-white/10 rounded-full flex items-center justify-center text-[#7A7D7B] hover:text-spa-crema hover:border-white/30 transition-all">
+                    <X size={18}/>
+                  </button>
                 </div>
-                <div className="space-y-8 flex-1">
-                   <button onClick={() => { setShowSideMenu(false); setShowBot(true); }} className="w-full flex items-center gap-4 group">
-                      <div className="w-12 h-12 rounded-2xl bg-spa-accent/10 flex items-center justify-center text-spa-gold group-hover:bg-spa-gold group-hover:text-spa-base transition-all"><CalendarIcon size={20}/></div>
-                      <span className="font-medium">Gestionar Cita</span>
-                   </button>
-                   <button onClick={() => { setShowSideMenu(false); setShowServices(true); }} className="w-full flex items-center gap-4 group">
-                      <div className="w-12 h-12 rounded-2xl bg-spa-accent/10 flex items-center justify-center text-spa-gold group-hover:bg-spa-gold group-hover:text-spa-base transition-all"><Leaf size={20}/></div>
-                      <span className="font-medium">Servicios</span>
-                   </button>
-                   {isAdminAuth ? (
-                     <button onClick={() => { setShowSideMenu(false); setShowAdminPanel(true); }} className="w-full flex items-center gap-4 group">
-                        <div className="w-12 h-12 rounded-2xl bg-spa-gold flex items-center justify-center text-spa-base shadow-xl"><User size={20}/></div>
-                        <span className="font-medium">Administración</span>
-                     </button>
-                   ) : (
-                     <a href="/api/auth/google" className="w-full flex items-center gap-4 group">
-                        <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-spa-crema group-hover:bg-spa-gold group-hover:text-spa-base transition-all"><User size={20}/></div>
-                        <span className="font-medium">Acceso Admin</span>
-                     </a>
-                   )}
-                </div>
-                {isAdminAuth && <button onClick={handleLogout} className="flex items-center gap-4 text-rose-500 mt-auto"><LogOut size={20}/> Cerrar Sesión</button>}
               </motion.div>
             </>
           )}

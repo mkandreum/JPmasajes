@@ -565,7 +565,7 @@ export default function App() {
           {bookingSlot && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-[100] bg-spa-base/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
                <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }} transition={{ type: "spring", damping: 30, stiffness: 300 }} className="w-full max-w-md bg-spa-card rounded-[24px] sm:rounded-[32px] border border-white/10 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-                 <div className="p-6 sm:p-8 overflow-y-auto no-scrollbar">
+                  <div className="p-6 sm:p-8 overflow-y-auto no-scrollbar flex-1 min-h-0">
                    <div className="flex justify-between items-center mb-5 sm:mb-6">
                        <h2 className="text-2xl sm:text-3xl font-serif">Reserva</h2>
                        <button onClick={() => setBookingSlot(null)} className="p-1.5 sm:p-2 bg-spa-elevated rounded-full hover:text-spa-gold transition-colors"><X size={18}/></button>

@@ -1083,7 +1083,7 @@ export default function App() {
                       <div className="min-w-[550px] px-6 sm:px-10">
                         <div className="grid grid-cols-[45px_repeat(7,1fr)] gap-px">
                           <div />
-                          {Array.from({length: 7}, (_, i) => addDays(calendarMonth, i)).map(day => {
+                          {Array.from({length: 7}, (_, i) => addDays(calendarMonth, i)).map((day, i) => {
                             const today = isSameDay(day, startOfToday());
                             const sel = selectedCalendarDay && isSameDay(day, selectedCalendarDay);
                             const appts = appointments.filter(a => isSameDay(parseISO(a.startTime), day));

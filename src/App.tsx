@@ -20,6 +20,16 @@ const intensityOptions = [
 const getIntensityInfo = (intensity?: string) =>
   intensityOptions.find(o => o.value === intensity) || { value: "", label: "—", className: "bg-white/5 text-[#7A7D7B] border-white/10" };
 
+const getStatusInfo = (status?: string) => {
+  switch (status) {
+    case "attending": return { label: "Asistirá", className: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" };
+    case "rescheduled": return { label: "Reagendada", className: "bg-blue-500/15 text-blue-400 border-blue-500/30" };
+    case "pending": return { label: "Pendiente", className: "bg-amber-500/15 text-amber-400 border-amber-500/30" };
+    case "cancelled": return { label: "Cancelada", className: "bg-rose-500/15 text-rose-400 border-rose-500/30" };
+    default: return { label: "Confirmada", className: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" };
+  }
+};
+
 interface Appointment {
   id?: string;
   clientName: string;
@@ -718,9 +728,9 @@ export default function App() {
                           <span className="text-[9px] font-bold text-spa-gold uppercase tracking-widest">Precio</span>
                           <span className="text-sm font-bold text-spa-gold">{viewingAppt.price || '—'}</span>
                         </div>
-                        <div className="flex justify-between">
+                        <div className="flex justify-between items-center">
                           <span className="text-[9px] font-bold text-spa-gold uppercase tracking-widest">Estado</span>
-                          <span className="text-sm text-emerald-500 font-bold">{viewingAppt.status}</span>
+                          <span className={`px-2.5 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider border ${getStatusInfo(viewingAppt.status).className}`}>{getStatusInfo(viewingAppt.status).label}</span>
                         </div>
                       </div>
                       {isBefore(parseISO(viewingAppt.startTime), new Date()) ? (
@@ -1017,7 +1027,9 @@ export default function App() {
                               className="bg-spa-elevated px-4 py-4 rounded-xl border border-white/5 flex items-center justify-between gap-4"
                             >
                               <div>
-                                <p className="text-sm font-medium">{appt.clientName}</p>
+                                <p className="text-sm font-medium flex items-center gap-2">{appt.clientName}
+                                  <span className={`px-1.5 py-0.5 rounded-md text-[7px] font-bold uppercase tracking-wider border ${getStatusInfo(appt.status).className}`}>{getStatusInfo(appt.status).label}</span>
+                                </p>
                                 <p className="text-[10px] text-[#7A7D7B] mt-1">
                                   {format(parseISO(appt.startTime), "d MMM, HH:mm", {
                                     locale: es,
@@ -1133,7 +1145,9 @@ export default function App() {
                                     className="bg-spa-elevated px-4 py-3 rounded-xl border border-white/5 flex items-center justify-between gap-4 group"
                                   >
                                     <div className="flex-1">
-                                      <p className="text-sm font-medium">{appt.clientName}</p>
+                                      <p className="text-sm font-medium flex items-center gap-2">{appt.clientName}
+                                        <span className={`px-1.5 py-0.5 rounded-md text-[7px] font-bold uppercase tracking-wider border ${getStatusInfo(appt.status).className}`}>{getStatusInfo(appt.status).label}</span>
+                                      </p>
                                       <p className="text-[10px] text-[#7A7D7B] mt-0.5">
                                         {format(parseISO(appt.startTime), "d MMM yyyy", {
                                           locale: es,

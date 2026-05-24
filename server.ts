@@ -87,6 +87,12 @@ try {
   db.exec("ALTER TABLE appointments ADD COLUMN addressSent INTEGER DEFAULT 0");
 } catch (e) { /* column may already exist */ }
 
+// Migration: Add reminder columns to appointments if they don't exist
+try {
+  db.exec("ALTER TABLE appointments ADD COLUMN reminder6hSent INTEGER DEFAULT 0");
+  db.exec("ALTER TABLE appointments ADD COLUMN reminder2hSent INTEGER DEFAULT 0");
+} catch (e) { /* columns may already exist */ }
+
 // Migration: Add logo columns to config if they don't exist
 try {
   db.exec("ALTER TABLE config ADD COLUMN logoUrl TEXT");
@@ -100,7 +106,7 @@ interface Appointment {
   clientPhone: string;
   startTime: string; // ISO
   endTime: string; // ISO
-  status: "confirmed" | "cancelled";
+  status: "pending" | "attending" | "rescheduled" | "cancelled";
   eventId?: string; // Google Calendar Event ID
   massageType?: string;
 }
@@ -384,7 +390,7 @@ async function startServer() {
     }
 
     db.prepare("INSERT INTO appointments (id, clientName, clientEmail, clientPhone, startTime, endTime, status, eventId, massageType, price, duration) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(id, clientName, clientEmail, clientPhone, startTime, endTime, 'confirmed', eventId, massageType, price || null, duration || null);
+      .run(id, clientName, clientEmail, clientPhone, startTime, endTime, 'pending', eventId, massageType, price || null, duration || null);
 
     // Send emails in background (don't block the response)
     if (tokens) {
@@ -394,12 +400,23 @@ async function startServer() {
       
       // Email to client
       const clientConfig = getConfig();
+      const confirmUrl = `${APP_URL}/api/appointments/${id}/confirm`;
+      const manageUrl = `${APP_URL}/?manage=${id}`;
+      const actionButtons = `
+<div style="margin:25px 0;">
+  <p style="font-size:15px;color:#A0A3A1;line-height:1.6;">Por favor, confirma tu asistencia o reagenda si lo necesitas:</p>
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:10px 0;">
+    <a href="${confirmUrl}" style="display:inline-block;background:#059669;color:#ffffff;text-decoration:none;padding:15px 30px;border-radius:12px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin:0 6px 8px;">✓ Sí, asistiré</a>
+    <a href="${manageUrl}" style="display:inline-block;background:#3B82F6;color:#ffffff;text-decoration:none;padding:15px 30px;border-radius:12px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin:0 6px 8px;">↻ No, reagendar</a>
+  </td></tr></table>
+  <p style="font-size:12px;color:#7A7D7B;line-height:1.5;margin-top:10px;">Si no respondes, te enviaremos un recordatorio más tarde.</p>
+</div>`;
       const addressNotice = clientConfig.address 
         ? `<p style="font-size:13px;color:#8F7256;background:rgba(143,114,86,0.1);padding:12px 16px;border-radius:10px;margin-top:16px;">📬 Recibirás un correo con la dirección del estudio <strong>2 horas antes</strong> de tu cita.</p>`
         : "";
       const clientHtml = getHtmlTemplate(
         "Cita Confirmada", 
-        `<p>Tu sesión de masaje ha sido reservada con éxito. Estamos deseando recibirte para brindarte la mejor experiencia de relajación.</p>${addressNotice}`,
+        `<p>Tu sesión de masaje ha sido reservada con éxito. Estamos deseando recibirte para brindarte la mejor experiencia de relajación.</p>${actionButtons}${addressNotice}`,
         clientName,
         dateStr,
         id,
@@ -423,7 +440,7 @@ async function startServer() {
       }
     }
 
-    res.json({ id, clientName, clientEmail, clientPhone, startTime, endTime, status: 'confirmed', eventId, massageType });
+    res.json({ id, clientName, clientEmail, clientPhone, startTime, endTime, status: 'pending', eventId, massageType });
   });
 
   app.put("/api/appointments/:id", async (req, res) => {
@@ -479,8 +496,8 @@ async function startServer() {
       } catch (e) { console.error(e); }
     }
     
-    db.prepare("UPDATE appointments SET startTime = ?, endTime = ? WHERE id = ?").run(newStart, newEnd, id);
-    res.json({ ...appt, startTime: newStart, endTime: newEnd });
+    db.prepare("UPDATE appointments SET startTime = ?, endTime = ?, status = 'rescheduled' WHERE id = ?").run(newStart, newEnd, id);
+    res.json({ ...appt, startTime: newStart, endTime: newEnd, status: 'rescheduled' });
   });
 
   app.delete("/api/appointments/:id", async (req, res) => {
@@ -530,6 +547,25 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  // Confirm attendance
+  app.get("/api/appointments/:id/confirm", (req, res) => {
+    const { id } = req.params;
+    const appt = db.prepare("SELECT * FROM appointments WHERE id = ?").get(id) as any;
+    if (!appt) return res.status(404).send("Cita no encontrada");
+
+    db.prepare("UPDATE appointments SET status = 'attending' WHERE id = ?").run(id);
+
+    res.send(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#0E1410;font-family:Georgia,serif;display:flex;align-items:center;justify-content:center;min-height:100vh;">
+  <div style="background:#141A16;border:1px solid rgba(143,114,86,0.25);border-radius:16px;padding:40px;max-width:400px;text-align:center;">
+    <div style="width:60px;height:60px;border-radius:50%;background:#059669;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;"><span style="font-size:28px;color:#fff;">✓</span></div>
+    <h1 style="color:#F9F8F6;font-size:24px;margin:0 0 10px;">¡Asistencia Confirmada!</h1>
+    <p style="color:#A0A3A1;font-size:15px;line-height:1.6;margin:0;">Gracias por confirmar. Estaremos encantados de recibirte.</p>
+  </div>
+</body></html>`);
+  });
+
   // Resend confirmation email for an appointment
   app.post("/api/appointments/:id/resend-email", async (req, res) => {
     const { id } = req.params;
@@ -543,9 +579,20 @@ async function startServer() {
       weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid'
     });
 
+    const confirmUrl = `${APP_URL}/api/appointments/${id}/confirm`;
+    const manageUrl = `${APP_URL}/?manage=${id}`;
+    const actionButtons = `
+<div style="margin:25px 0;">
+  <p style="font-size:15px;color:#A0A3A1;line-height:1.6;">Por favor, confirma tu asistencia o reagenda si lo necesitas:</p>
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:10px 0;">
+    <a href="${confirmUrl}" style="display:inline-block;background:#059669;color:#ffffff;text-decoration:none;padding:15px 30px;border-radius:12px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin:0 6px 8px;">✓ Sí, asistiré</a>
+    <a href="${manageUrl}" style="display:inline-block;background:#3B82F6;color:#ffffff;text-decoration:none;padding:15px 30px;border-radius:12px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin:0 6px 8px;">↻ No, reagendar</a>
+  </td></tr></table>
+  <p style="font-size:12px;color:#7A7D7B;line-height:1.5;margin-top:10px;">Si no respondes, te enviaremos un recordatorio más tarde.</p>
+</div>`;
     const html = getHtmlTemplate(
       "Cita Confirmada",
-      "<p>Tu sesión de masaje ha sido reservada con éxito. Estamos deseando recibirte para brindarte la mejor experiencia de relajación.</p>",
+      `<p>Tu sesión de masaje ha sido reservada con éxito. Estamos deseando recibirte para brindarte la mejor experiencia de relajación.</p>${actionButtons}`,
       appt.clientName,
       dateStr,
       id,
@@ -697,8 +744,8 @@ async function startServer() {
       } catch (e) { console.error(e); }
     }
 
-    db.prepare("UPDATE appointments SET startTime = ?, endTime = ? WHERE id = ?").run(newStartTime, newEnd, id);
-    res.json({ ...appt, startTime: newStartTime, endTime: newEnd });
+    db.prepare("UPDATE appointments SET startTime = ?, endTime = ?, status = 'rescheduled' WHERE id = ?").run(newStartTime, newEnd, id);
+    res.json({ ...appt, startTime: newStartTime, endTime: newEnd, status: 'rescheduled' });
   });
 
   // AI Chat Route
@@ -763,7 +810,7 @@ db.prepare("INSERT INTO appointments (id, clientName, clientEmail, clientPhone, 
           } else if (fnCall.name === "updateAppointment") {
              const args = fnCall.args as any;
              const endTime = new Date(new Date(args.newStartTime).getTime() + 60*60*1000).toISOString();
-             db.prepare("UPDATE appointments SET startTime = ?, endTime = ? WHERE id = ?").run(args.newStartTime, endTime, args.appointmentId);
+             db.prepare("UPDATE appointments SET startTime = ?, endTime = ?, status = 'rescheduled' WHERE id = ?").run(args.newStartTime, endTime, args.appointmentId);
              responseText = `Cita movida a las ${new Date(args.newStartTime).toLocaleString('es-ES')}.`;
           }
        }
@@ -787,7 +834,7 @@ db.prepare("INSERT INTO appointments (id, clientName, clientEmail, clientPhone, 
     const upperBound = new Date(twoHoursLater.getTime() + tolerance).toISOString();
 
     const rows = db.prepare(
-      "SELECT * FROM appointments WHERE startTime BETWEEN ? AND ? AND status = 'confirmed' AND (addressSent IS NULL OR addressSent = 0)"
+      "SELECT * FROM appointments WHERE startTime BETWEEN ? AND ? AND status = 'attending' AND (addressSent IS NULL OR addressSent = 0)"
     ).all(lowerBound, upperBound) as any[];
 
     for (const appt of rows) {
@@ -859,6 +906,99 @@ db.prepare("INSERT INTO appointments (id, clientName, clientEmail, clientPhone, 
   };
   setInterval(checkAndSendAddressEmails, 60 * 1000);
   checkAndSendAddressEmails();
+
+  // Scheduler: send reminder emails for pending appointments
+  const checkAndSendReminders = async () => {
+    const tokens = getAdminTokens();
+    if (!tokens) return;
+
+    const now = new Date();
+    const tolerance = 5 * 60 * 1000;
+
+    // 6 hours before — first reminder
+    const sixHoursLater = new Date(now.getTime() + 6 * 60 * 60 * 1000);
+    const reminder6hRows = db.prepare(
+      "SELECT * FROM appointments WHERE startTime BETWEEN ? AND ? AND status = 'pending' AND (reminder6hSent IS NULL OR reminder6hSent = 0)"
+    ).all(
+      new Date(sixHoursLater.getTime() - tolerance).toISOString(),
+      new Date(sixHoursLater.getTime() + tolerance).toISOString()
+    ) as any[];
+
+    for (const appt of reminder6hRows) {
+      try {
+        const dateStr = new Date(appt.startTime).toLocaleString('es-ES', {
+          weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid'
+        });
+        const confirmUrl = `${APP_URL}/api/appointments/${appt.id}/confirm`;
+        const manageUrl = `${APP_URL}/?manage=${appt.id}`;
+        const reminderHtml = getHtmlTemplate(
+          "Recordatorio de Confirmación",
+          `<p>Te recordamos que aún no has confirmado tu asistencia para la siguiente cita:</p>
+           <div style="background:#1E2520;border:1px solid rgba(143,114,86,0.15);border-radius:12px;padding:20px;margin:20px 0;">
+             <p style="margin:0;font-size:14px;color:#F9F8F6;"><strong>${dateStr}</strong></p>
+             <p style="margin:5px 0 0;font-size:13px;color:#A0A3A1;">${appt.massageType || 'Masaje Terapéutico'}</p>
+           </div>
+           <div style="margin:20px 0;text-align:center;">
+             <a href="${confirmUrl}" style="display:inline-block;background:#059669;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin:0 5px 8px;">✓ Confirmar Asistencia</a>
+             <a href="${manageUrl}" style="display:inline-block;background:#3B82F6;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin:0 5px 8px;">↻ Reagendar</a>
+           </div>
+           <p style="font-size:13px;color:#7A7D7B;">Si no respondes, te enviaremos otro recordatorio más cerca de la fecha.</p>`,
+          appt.clientName,
+          dateStr,
+          appt.id,
+          appt.massageType
+        );
+        await sendEmail(appt.clientEmail, "Recordatorio: Confirma tu asistencia - Jean Pierre", reminderHtml);
+        db.prepare("UPDATE appointments SET reminder6hSent = 1 WHERE id = ?").run(appt.id);
+        console.log(`Reminder 6h sent for appointment ${appt.id}`);
+      } catch (e) {
+        console.error(`Failed to send 6h reminder for ${appt.id}:`, e);
+      }
+    }
+
+    // 2 hours before — second reminder (if still pending)
+    const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+    const reminder2hRows = db.prepare(
+      "SELECT * FROM appointments WHERE startTime BETWEEN ? AND ? AND status = 'pending' AND (reminder2hSent IS NULL OR reminder2hSent = 0)"
+    ).all(
+      new Date(twoHoursLater.getTime() - tolerance).toISOString(),
+      new Date(twoHoursLater.getTime() + tolerance).toISOString()
+    ) as any[];
+
+    for (const appt of reminder2hRows) {
+      try {
+        const dateStr = new Date(appt.startTime).toLocaleString('es-ES', {
+          weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid'
+        });
+        const confirmUrl = `${APP_URL}/api/appointments/${appt.id}/confirm`;
+        const manageUrl = `${APP_URL}/?manage=${appt.id}`;
+        const reminderHtml = getHtmlTemplate(
+          "Último Recordatorio",
+          `<p>Tu cita es en aproximadamente <strong style="color:#F9F8F6;">2 horas</strong> y aún no has confirmado tu asistencia.</p>
+           <div style="background:#1E2520;border:1px solid rgba(143,114,86,0.15);border-radius:12px;padding:20px;margin:20px 0;">
+             <p style="margin:0;font-size:14px;color:#F9F8F6;"><strong>${dateStr}</strong></p>
+             <p style="margin:5px 0 0;font-size:13px;color:#A0A3A1;">${appt.massageType || 'Masaje Terapéutico'}</p>
+           </div>
+           <p style="font-size:15px;color:#A0A3A1;line-height:1.6;">Por favor, confirma si podrás asistir o reagenda a otro horario:</p>
+           <div style="margin:20px 0;text-align:center;">
+             <a href="${confirmUrl}" style="display:inline-block;background:#059669;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin:0 5px 8px;">✓ Sí, asistiré</a>
+             <a href="${manageUrl}" style="display:inline-block;background:#3B82F6;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin:0 5px 8px;">↻ Reagendar</a>
+           </div>`,
+          appt.clientName,
+          dateStr,
+          appt.id,
+          appt.massageType
+        );
+        await sendEmail(appt.clientEmail, "⏰ Tu cita es pronto - Jean Pierre", reminderHtml);
+        db.prepare("UPDATE appointments SET reminder2hSent = 1 WHERE id = ?").run(appt.id);
+        console.log(`Reminder 2h sent for appointment ${appt.id}`);
+      } catch (e) {
+        console.error(`Failed to send 2h reminder for ${appt.id}:`, e);
+      }
+    }
+  };
+  setInterval(checkAndSendReminders, 60 * 1000);
+  checkAndSendReminders();
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

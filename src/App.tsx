@@ -132,6 +132,14 @@ export default function App() {
   const [historyFilterStatus, setHistoryFilterStatus] = useState<string>("all");
   const [historySearchQuery, setHistorySearchQuery] = useState<string>("");
   
+  // Confirmation Modal State
+  const [cancelModalData, setCancelModalData] = useState<{
+    appt: Appointment;
+    mode: "admin_delete" | "admin_cancel" | "client_cancel";
+  } | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [isCancellingAppt, setIsCancellingAppt] = useState(false);
+
   // Parallax Effect
   const heroRef = useRef(null);
   const { scrollY } = useScroll();
@@ -322,16 +330,8 @@ export default function App() {
     }
   };
 
-  const handleAdminDelete = async (appt: Appointment) => {
-    if (confirm(`¿Eliminar la cita de ${appt.clientName}?`)) {
-      try {
-        await fetch(`/api/appointments/${appt.id}`, { method: "DELETE" });
-        toast.success("Cita eliminada");
-        fetchAppointments();
-      } catch {
-        toast.error("Error al eliminar cita");
-      }
-    }
+  const handleAdminDelete = (appt: Appointment) => {
+    setCancelModalData({ appt, mode: "admin_delete" });
   };
 
   const handleLogout = async () => {
@@ -400,22 +400,53 @@ export default function App() {
     }
   };
 
-  const handleAdminCancel = async (appt: Appointment) => {
-    const reason = prompt("Motivo de la cancelación (opcional):");
-    if (reason === null) return;
-    if (confirm(`¿Cancelar cita de ${appt.clientName}?`)) {
-      try {
+  const handleAdminCancel = (appt: Appointment) => {
+    setCancelReason("");
+    setCancelModalData({ appt, mode: "admin_cancel" });
+  };
+
+  const executeCancelAction = async () => {
+    if (!cancelModalData) return;
+    const { appt, mode } = cancelModalData;
+    setIsCancellingAppt(true);
+
+    try {
+      if (mode === "admin_delete") {
+        await fetch(`/api/appointments/${appt.id}`, { method: "DELETE" });
+        toast.success("Cita eliminada");
+        fetchAppointments();
+        setCancelModalData(null);
+      } else if (mode === "admin_cancel") {
         await fetch(`/api/appointments/${appt.id}`, {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reason: reason || undefined })
+          body: JSON.stringify({ reason: cancelReason || undefined })
         });
         toast.success("Cita cancelada");
         setViewingAppt(null);
         fetchAppointments();
-      } catch {
-        toast.error("Error al cancelar cita");
+        setCancelModalData(null);
+      } else if (mode === "client_cancel") {
+        const res = await fetch(`/api/bot/appointments/${appt.id}/cancel`, { 
+            method: "POST", 
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: botData.email }) 
+        });
+        const data = await res.json();
+        if (data.error) {
+            toast.error(data.error);
+        } else {
+            toast.success("Cita cancelada con éxito");
+            fetchAppointments();
+            setBotStep("greeting");
+            setShowBot(false);
+            setCancelModalData(null);
+        }
       }
+    } catch {
+      toast.error("Error al procesar la cancelación");
+    } finally {
+      setIsCancellingAppt(false);
     }
   };
 
@@ -1632,6 +1663,114 @@ export default function App() {
             </motion.div>
           )}
 
+          {/* Custom Confirmation Modal */}
+          <AnimatePresence>
+            {cancelModalData && (
+              <motion.div 
+                initial={{ opacity: 0 }} 
+                animate={{ opacity: 1 }} 
+                exit={{ opacity: 0 }} 
+                className="absolute inset-0 z-[250] bg-spa-base/60 backdrop-blur-md flex items-center justify-center p-4"
+              >
+                <motion.div 
+                  initial={{ y: 30, opacity: 0, scale: 0.95 }} 
+                  animate={{ y: 0, opacity: 1, scale: 1 }} 
+                  exit={{ y: 30, opacity: 0, scale: 0.95 }} 
+                  transition={{ type: "spring", damping: 28, stiffness: 300 }} 
+                  className="w-full max-w-md bg-spa-card rounded-[24px] border border-white/10 shadow-2xl overflow-hidden p-6 space-y-6 animate-fade-in"
+                >
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-xl font-serif text-spa-crema">
+                      {cancelModalData.mode === "admin_delete" ? "Eliminar Cita" : "Cancelar Cita"}
+                    </h3>
+                    <button 
+                      onClick={() => { setCancelModalData(null); setCancelReason(""); }} 
+                      className="p-1.5 bg-spa-elevated rounded-full hover:text-spa-gold hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                      disabled={isCancellingAppt}
+                    >
+                      <X size={18}/>
+                    </button>
+                  </div>
+
+                  <div className="bg-gradient-to-r from-spa-accent/10 to-transparent p-4 rounded-xl border border-white/5 space-y-2">
+                    <p className="text-[9px] text-spa-gold font-bold uppercase tracking-widest">Detalles de la Cita</p>
+                    <div className="space-y-1">
+                      <p className="text-sm font-serif text-spa-crema">{cancelModalData.appt.clientName}</p>
+                      <p className="text-[10px] text-[#7A7D7B]">{cancelModalData.appt.clientEmail} • {cancelModalData.appt.clientPhone}</p>
+                      <p className="text-[11px] text-spa-crema/80 font-serif">
+                        {format(parseISO(cancelModalData.appt.startTime), "EEEE d 'de' MMMM", { locale: es })}
+                        <span className="text-spa-gold font-sans font-bold text-[10px] tracking-wider uppercase ml-2">
+                          {format(parseISO(cancelModalData.appt.startTime), "HH:mm")}
+                        </span>
+                      </p>
+                      <p className="text-[10px] text-[#7A7D7B] uppercase tracking-wider mt-1">{cancelModalData.appt.massageType}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {cancelModalData.mode === "admin_delete" && (
+                      <p className="text-xs text-[#7A7D7B] leading-relaxed">
+                        ¿Estás seguro de que deseas eliminar permanentemente esta cita de la base de datos y del calendario? Esta acción no se puede deshacer y no enviará notificaciones al cliente.
+                      </p>
+                    )}
+
+                    {cancelModalData.mode === "admin_cancel" && (
+                      <div className="space-y-3">
+                        <p className="text-xs text-[#7A7D7B] leading-relaxed">
+                          ¿Deseas cancelar esta cita? Se eliminará de la agenda y se enviará una notificación de cancelación por correo electrónico al cliente.
+                        </p>
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] text-spa-gold uppercase font-bold tracking-widest">Motivo de cancelación (Opcional)</label>
+                          <textarea 
+                            value={cancelReason} 
+                            onChange={e => setCancelReason(e.target.value)} 
+                            placeholder="Ej. Jean Pierre tiene un imprevisto médico, por favor reagenda..." 
+                            rows={3} 
+                            className="w-full bg-spa-elevated border border-white/5 rounded-xl px-4 py-3 outline-none focus:border-spa-gold text-xs text-spa-crema placeholder-white/20 resize-none transition-all"
+                            disabled={isCancellingAppt}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {cancelModalData.mode === "client_cancel" && (
+                      <p className="text-xs text-[#7A7D7B] leading-relaxed">
+                        Lamentamos que tengas que cancelar tu cita. Si confirmas la cancelación, liberaremos este horario para que otra persona pueda disfrutar de un masaje. ¿Confirmas la cancelación de tu cita?
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex gap-3 pt-2">
+                    <button 
+                      onClick={() => { setCancelModalData(null); setCancelReason(""); }}
+                      className="flex-1 py-3.5 border border-white/10 rounded-xl text-[10px] font-bold uppercase tracking-widest text-[#7A7D7B] hover:text-spa-crema hover:bg-white/5 active:scale-98 transition-all cursor-pointer"
+                      disabled={isCancellingAppt}
+                    >
+                      Volver
+                    </button>
+                    <button 
+                      onClick={executeCancelAction}
+                      className={`flex-1 py-3.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all cursor-pointer shadow-lg active:scale-98 flex items-center justify-center gap-2 ${
+                        cancelModalData.mode === "admin_delete" || cancelModalData.mode === "client_cancel"
+                          ? "bg-rose-500/20 border border-rose-500/40 text-rose-400 hover:bg-rose-500 hover:text-white" 
+                          : "bg-spa-gold text-spa-base hover:opacity-90 font-bold"
+                      }`}
+                      disabled={isCancellingAppt}
+                    >
+                      {isCancellingAppt ? (
+                        <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+                      ) : cancelModalData.mode === "admin_delete" ? (
+                        "Eliminar"
+                      ) : (
+                        "Confirmar"
+                      )}
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Edit Massage Modal (Servicios) */}
           {showServiciosEditModal && editMassageId && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-[200] bg-spa-base/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1936,28 +2075,9 @@ export default function App() {
                                       </div>
                                       <div className="flex gap-2 pt-2">
                                           <button onClick={() => { setBotData({...botData, selectedApptId: a.id!}); setBotStep("reschedule"); toast.info("Selecciona un nuevo horario disponible en el calendario"); }} className="flex-1 py-3 bg-spa-accent/10 border border-spa-accent/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-spa-gold hover:bg-spa-accent hover:text-spa-base transition-all cursor-pointer">Reagendar</button>
-                                          <button onClick={async () => {
-                                              if (confirm("¿Estás seguro de cancelar esta cita?")) {
-                                                  try {
-                                                      const res = await fetch(`/api/bot/appointments/${a.id}/cancel`, { 
-                                                          method: "POST", 
-                                                          headers: { "Content-Type": "application/json" },
-                                                          body: JSON.stringify({ email: botData.email }) 
-                                                      });
-                                                      const data = await res.json();
-                                                      if (data.error) {
-                                                          toast.error(data.error);
-                                                      } else {
-                                                          toast.success("Cita cancelada con éxito");
-                                                          fetchAppointments();
-                                                          setBotStep("greeting");
-                                                          setShowBot(false);
-                                                      }
-                                                  } catch {
-                                                      toast.error("Error al conectar con el servidor para cancelar");
-                                                  }
-                                              }
-                                          }} className="px-4 py-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-rose-500 hover:bg-rose-500 hover:text-white transition-all cursor-pointer"><Trash2 size={14}/></button>
+                                          <button onClick={() => {
+                                               setCancelModalData({ appt: a, mode: "client_cancel" });
+                                           }} className="px-4 py-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-rose-500 hover:bg-rose-500 hover:text-white transition-all cursor-pointer"><Trash2 size={14}/></button>
                                       </div>
                                   </div>
                               ))}

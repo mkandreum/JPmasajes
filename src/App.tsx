@@ -1963,7 +1963,7 @@ export default function App() {
                                   </div>
                                   <div className="bg-spa-elevated p-4 rounded-2xl border border-white/5 space-y-1">
                                       <p className="text-xs font-bold text-spa-gold">¿Qué formas de pago tenéis?</p>
-                                      <p className="text-[10px] text-[#A0A3A1] leading-relaxed">Aceptamos pagos en efectivo, Bizum y tarjeta de crédito en el estudio una vez finalizada la sesión de masaje.</p>
+                                      <p className="text-[10px] text-[#A0A3A1] leading-relaxed">Aceptamos únicamente pagos en efectivo en el estudio una vez finalizada la sesión de masaje.</p>
                                   </div>
                               </div>
                               <button onClick={() => setBotStep("greeting")} className="w-full py-3 bg-white/5 rounded-xl text-[9px] font-bold uppercase tracking-widest text-[#7A7D7B] hover:text-spa-crema transition-all cursor-pointer">← Volver al Menú</button>

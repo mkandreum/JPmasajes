@@ -1623,51 +1623,47 @@ export default function App() {
           {/* Side Menu */}
           {showSideMenu && (
             <>
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowSideMenu(false)} className="absolute inset-0 z-[60] bg-black/60 backdrop-blur-md" />
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowSideMenu(false)} className="absolute inset-0 z-[60] bg-black/30" />
               <motion.div
-                initial={{ opacity: 0, scale: 0.92, y: 30 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.92, y: 30 }}
-                transition={{ type: "spring", damping: 28, stiffness: 300 }}
-                className="absolute inset-0 z-[70] flex items-center justify-center p-8"
+                initial={{ opacity: 0, y: 30, scale: 0.9 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 30, scale: 0.9 }}
+                transition={{ type: "spring", damping: 25, stiffness: 350 }}
+                className="absolute bottom-24 inset-x-0 z-[70] flex justify-center px-8"
               >
-                <div className="w-full max-w-[280px] bg-spa-card rounded-[28px] border border-white/10 shadow-2xl p-8 flex flex-col items-center gap-8">
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-spa-gold to-spa-accent flex items-center justify-center text-spa-base shadow-xl">
-                      <Leaf size={28} />
+                <div className="w-full max-w-[280px] bg-spa-card rounded-[24px] border border-white/10 shadow-2xl p-6 flex flex-col items-center gap-5">
+                  <div className="flex flex-col items-center gap-1.5">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-spa-gold to-spa-accent flex items-center justify-center text-spa-base shadow-lg">
+                      <Leaf size={22} />
                     </div>
-                    <span className="text-[9px] font-bold text-spa-gold uppercase tracking-[0.3em] mt-1">JP Masajes</span>
-                    <div className="h-px w-12 bg-spa-gold/30 mt-1" />
+                    <span className="text-[8px] font-bold text-spa-gold uppercase tracking-[0.3em]">JP Masajes</span>
                   </div>
-                  <div className="w-full space-y-3">
-                    <button onClick={() => { setShowSideMenu(false); setShowBot(true); }} className="w-full flex items-center gap-4 p-4 bg-spa-elevated rounded-2xl border border-white/5 hover:border-spa-gold/30 hover:bg-spa-accent/10 transition-all group">
-                      <div className="w-10 h-10 rounded-xl bg-spa-accent/10 flex items-center justify-center text-spa-gold group-hover:bg-spa-gold group-hover:text-spa-base transition-all shrink-0"><CalendarIcon size={18}/></div>
+                  <div className="w-full space-y-2">
+                    <button onClick={() => { setShowSideMenu(false); setShowBot(true); }} className="w-full flex items-center gap-3 p-3.5 bg-spa-elevated rounded-xl border border-white/5 hover:border-spa-gold/30 hover:bg-spa-accent/10 transition-all group">
+                      <div className="w-9 h-9 rounded-lg bg-spa-accent/10 flex items-center justify-center text-spa-gold group-hover:bg-spa-gold group-hover:text-spa-base transition-all shrink-0"><CalendarIcon size={16}/></div>
                       <span className="text-sm font-medium">Gestionar Cita</span>
                     </button>
-                    <button onClick={() => { setShowSideMenu(false); setShowServices(true); }} className="w-full flex items-center gap-4 p-4 bg-spa-elevated rounded-2xl border border-white/5 hover:border-spa-gold/30 hover:bg-spa-accent/10 transition-all group">
-                      <div className="w-10 h-10 rounded-xl bg-spa-accent/10 flex items-center justify-center text-spa-gold group-hover:bg-spa-gold group-hover:text-spa-base transition-all shrink-0"><Leaf size={18}/></div>
+                    <button onClick={() => { setShowSideMenu(false); setShowServices(true); }} className="w-full flex items-center gap-3 p-3.5 bg-spa-elevated rounded-xl border border-white/5 hover:border-spa-gold/30 hover:bg-spa-accent/10 transition-all group">
+                      <div className="w-9 h-9 rounded-lg bg-spa-accent/10 flex items-center justify-center text-spa-gold group-hover:bg-spa-gold group-hover:text-spa-base transition-all shrink-0"><Leaf size={16}/></div>
                       <span className="text-sm font-medium">Servicios</span>
                     </button>
                     {isAdminAuth ? (
-                      <button onClick={() => { setShowSideMenu(false); setShowAdminPanel(true); }} className="w-full flex items-center gap-4 p-4 bg-spa-elevated rounded-2xl border border-white/5 hover:border-spa-gold/30 hover:bg-spa-accent/10 transition-all group">
-                        <div className="w-10 h-10 rounded-xl bg-spa-gold flex items-center justify-center text-spa-base shrink-0"><User size={18}/></div>
+                      <button onClick={() => { setShowSideMenu(false); setShowAdminPanel(true); }} className="w-full flex items-center gap-3 p-3.5 bg-spa-elevated rounded-xl border border-white/5 hover:border-spa-gold/30 hover:bg-spa-accent/10 transition-all group">
+                        <div className="w-9 h-9 rounded-lg bg-spa-gold flex items-center justify-center text-spa-base shrink-0"><User size={16}/></div>
                         <span className="text-sm font-medium">Administración</span>
                       </button>
                     ) : (
-                      <a href="/api/auth/google" className="w-full flex items-center gap-4 p-4 bg-spa-elevated rounded-2xl border border-white/5 hover:border-spa-gold/30 hover:bg-spa-accent/10 transition-all group">
-                        <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-spa-crema group-hover:bg-spa-gold group-hover:text-spa-base transition-all shrink-0"><User size={18}/></div>
+                      <a href="/api/auth/google" className="w-full flex items-center gap-3 p-3.5 bg-spa-elevated rounded-xl border border-white/5 hover:border-spa-gold/30 hover:bg-spa-accent/10 transition-all group">
+                        <div className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center text-spa-crema group-hover:bg-spa-gold group-hover:text-spa-base transition-all shrink-0"><User size={16}/></div>
                         <span className="text-sm font-medium">Acceso Admin</span>
                       </a>
                     )}
                   </div>
                   {isAdminAuth && (
-                    <button onClick={handleLogout} className="flex items-center gap-3 text-rose-500 text-xs font-bold uppercase tracking-widest hover:text-rose-400 transition-all">
-                      <LogOut size={14}/> Cerrar Sesión
+                    <button onClick={handleLogout} className="flex items-center gap-2 text-rose-500 text-[10px] font-bold uppercase tracking-widest hover:text-rose-400 transition-all">
+                      <LogOut size={12}/> Cerrar Sesión
                     </button>
                   )}
-                  <button onClick={() => setShowSideMenu(false)} className="w-10 h-10 bg-white/5 border border-white/10 rounded-full flex items-center justify-center text-[#7A7D7B] hover:text-spa-crema hover:border-white/30 transition-all">
-                    <X size={18}/>
-                  </button>
                 </div>
               </motion.div>
             </>

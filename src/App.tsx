@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Menu, User, Clock, ChevronLeft, ChevronRight, X, Calendar as CalendarIcon, Phone, Mail, Leaf, MessageCircle, Send, LogOut, Sun, Moon, Plus, Trash2, Eye, Check, Sparkles } from "lucide-react";
-import { format, addDays, startOfToday, startOfMonth, endOfMonth, parseISO, isSameDay, setHours, setMinutes, isBefore, isAfter } from "date-fns";
+import { format, addDays, startOfToday, parseISO, isSameDay, setHours, setMinutes, isBefore, isAfter } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast, Toaster } from "sonner";
 import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
@@ -1021,72 +1021,68 @@ export default function App() {
                   <button onClick={() => setShowClientsPage(false)} className="p-3 bg-spa-elevated rounded-full hover:text-spa-gold"><X size={20}/></button>
                 </div>
                 <div className="flex-1 overflow-y-auto p-6 sm:p-10 space-y-8 no-scrollbar">
-                  {/* Calendar */}
-                  <div className="space-y-4">
+                  {/* Weekly Schedule */}
+                  <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <button onClick={() => setCalendarMonth(d => addDays(d, -30))} className="p-2 text-[#7A7D7B] hover:text-spa-gold transition-colors"><ChevronLeft size={18}/></button>
-                      <h3 className="text-[11px] font-bold text-spa-gold uppercase tracking-[0.4em]">{format(calendarMonth, "MMMM yyyy", { locale: es })}</h3>
-                      <button onClick={() => setCalendarMonth(d => addDays(d, 30))} className="p-2 text-[#7A7D7B] hover:text-spa-gold transition-colors"><ChevronRight size={18}/></button>
+                      <button onClick={() => setCalendarMonth(d => addDays(d, -7))} className="p-1.5 text-[#7A7D7B] hover:text-spa-gold transition-colors"><ChevronLeft size={16}/></button>
+                      <h3 className="text-[10px] font-bold text-spa-gold uppercase tracking-[0.3em]">{format(calendarMonth, "d MMM", { locale: es })} — {format(addDays(calendarMonth, 6), "d MMM yyyy", { locale: es })}</h3>
+                      <button onClick={() => setCalendarMonth(d => addDays(d, 7))} className="p-1.5 text-[#7A7D7B] hover:text-spa-gold transition-colors"><ChevronRight size={16}/></button>
                     </div>
-                    <div className="grid grid-cols-7 gap-1">
-                      {["L", "M", "M", "J", "V", "S", "D"].map(d => (
-                        <div key={d} className="text-center text-[8px] font-bold text-[#7A7D7B] uppercase tracking-widest py-1">{d}</div>
-                      ))}
-                      {(() => {
-                        const start = startOfMonth(calendarMonth);
-                        const end = endOfMonth(calendarMonth);
-                        const startDay = (start.getDay() + 6) % 7;
-                        const days: (Date | null)[] = [];
-                        for (let i = 0; i < startDay; i++) days.push(null);
-                        for (let d = 1; d <= end.getDate(); d++) days.push(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), d));
-                        return days.map((day, i) => {
-                          if (!day) return <div key={`e${i}`} />;
-                          const appts = appointments.filter(a => isSameDay(parseISO(a.startTime), day));
-                          const isSelected = selectedCalendarDay && isSameDay(day, selectedCalendarDay);
-                          const isToday = isSameDay(day, startOfToday());
-                          return (
-                            <button key={i} onClick={() => setSelectedCalendarDay(isSelected ? null : day)}
-                              className={cn(
-                                "aspect-square rounded-lg text-[10px] font-medium flex flex-col items-center justify-center transition-all relative",
-                                isSelected ? "bg-spa-gold text-spa-base shadow-lg scale-105" : isToday ? "bg-spa-accent/20 text-spa-crema border border-spa-accent/30" : "bg-spa-elevated text-[#7A7D7B] hover:bg-spa-accent/10 hover:text-spa-crema"
-                              )}
-                            >
-                              <span>{format(day, "d")}</span>
-                              {appts.length > 0 && <span className={cn("w-1 h-1 rounded-full mt-0.5", isSelected ? "bg-spa-base" : "bg-spa-gold")} />}
-                            </button>
-                          );
-                        });
-                      })()}
+                    <div className="overflow-x-auto no-scrollbar -mx-6 sm:-mx-10">
+                      <div className="min-w-[550px] px-6 sm:px-10">
+                        <div className="grid grid-cols-[45px_repeat(7,1fr)] gap-px">
+                          <div />
+                          {Array.from({length: 7}, (_, i) => addDays(calendarMonth, i)).map(day => {
+                            const today = isSameDay(day, startOfToday());
+                            const sel = selectedCalendarDay && isSameDay(day, selectedCalendarDay);
+                            const appts = appointments.filter(a => isSameDay(parseISO(a.startTime), day));
+                            return (
+                              <button key={i} onClick={() => setSelectedCalendarDay(sel ? null : day)}
+                                className={cn("text-center py-1.5 rounded-lg transition-all", sel ? "bg-spa-gold text-spa-base" : today ? "bg-spa-accent/20" : "hover:bg-spa-accent/10")}
+                              >
+                                <div className="text-[6px] font-bold uppercase tracking-wider opacity-60">{format(day, "EEEEE", { locale: es })}</div>
+                                <div className="text-[11px] font-bold">{format(day, "d")}</div>
+                                {appts.length > 0 && <div className="w-1 h-1 rounded-full bg-spa-gold mx-auto mt-0.5" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="mt-2 space-y-px">
+                          {[...config.morningHours, ...config.afternoonHours].map(hour => {
+                            const [hh, mm] = hour.split(":").map(Number);
+                            return (
+                              <div key={hour} className="grid grid-cols-[45px_repeat(7,1fr)] gap-px border-t border-white/5 py-0.5">
+                                <div className="text-[7px] text-[#7A7D7B] font-mono text-right pr-1.5 leading-8">{hour}</div>
+                                {Array.from({length: 7}, (_, i) => {
+                                  const day = addDays(calendarMonth, i);
+                                  const appt = appointments.find(a =>
+                                    isSameDay(parseISO(a.startTime), day) &&
+                                    parseISO(a.startTime).getHours() === hh &&
+                                    parseISO(a.startTime).getMinutes() === mm
+                                  );
+                                  return (
+                                    <div key={i} className="min-h-[32px]">
+                                      {appt ? (
+                                        <div onClick={() => { setViewingAppt(appt); setShowClientsPage(false); }} className="h-full bg-spa-accent/15 border border-spa-accent/30 rounded-md px-1.5 py-1 flex flex-col justify-center cursor-pointer hover:bg-spa-accent/25 transition-colors">
+                                          <p className="text-[7px] font-bold text-spa-crema leading-tight truncate">{appt.clientName.split(" ")[0]}</p>
+                                          <p className="text-[6px] text-[#B8BBB9] leading-tight truncate">{appt.massageType?.split(" ").slice(0,2).join(" ") || "Masaje"}</p>
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
                     {selectedCalendarDay && (
-                      <div className="text-center text-[9px] text-spa-gold font-bold uppercase tracking-widest">
+                      <div className="text-center text-[8px] text-spa-gold font-bold uppercase tracking-widest">
                         {format(selectedCalendarDay, "EEEE d 'de' MMMM", { locale: es })} — {appointments.filter(a => isSameDay(parseISO(a.startTime), selectedCalendarDay)).length} cita(s)
                       </div>
                     )}
                   </div>
-
-                  {/* Citas del día seleccionado */}
-                  {selectedCalendarDay && (
-                    <div className="space-y-2">
-                      {appointments.filter(a => isSameDay(parseISO(a.startTime), selectedCalendarDay)).sort((a,b) => parseISO(a.startTime).getTime() - parseISO(b.startTime).getTime()).map(appt => (
-                        <div key={appt.id} className="bg-spa-elevated px-4 py-3 rounded-xl border border-white/5 flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            <div className="text-center">
-                              <p className="text-lg font-serif text-spa-gold">{format(parseISO(appt.startTime), "HH:mm")}</p>
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium">{appt.clientName}</p>
-                              <p className="text-[9px] text-[#7A7D7B]">{appt.massageType || "Masaje"}{appt.duration && ` • ${appt.duration}`}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <span className={`px-1.5 py-0.5 rounded-md text-[7px] font-bold uppercase tracking-wider border ${getStatusInfo(appt.status).className}`}>{getStatusInfo(appt.status).label}</span>
-                            <button onClick={() => { setViewingAppt(appt); setShowClientsPage(false); }} className="p-1.5 text-[#7A7D7B] hover:text-spa-gold transition-colors"><Eye size={14}/></button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
 
                   {/* Próximas Citas */}
                   <div className="space-y-4">
@@ -1111,9 +1107,9 @@ export default function App() {
                               </div>
                               <div className="flex items-center gap-1 shrink-0">
                                 <span className={`px-1.5 py-0.5 rounded-md text-[7px] font-bold uppercase tracking-wider border ${getStatusInfo(appt.status).className}`}>{getStatusInfo(appt.status).label}</span>
-                                <button onClick={() => { setEmailAppointment(appt); setShowEmailModal(true); }} className="p-1.5 text-[#7A7D7B] hover:text-blue-400 transition-colors" title="Correo"><Mail size={14}/></button>
-                                <button onClick={() => handleAddToCalendar(appt)} className="p-1.5 text-[#7A7D7B] hover:text-emerald-400 transition-colors" title="Calendario"><CalendarIcon size={14}/></button>
-                                <button onClick={() => { setViewingAppt(appt); setShowClientsPage(false); }} className="p-1.5 text-[#7A7D7B] hover:text-spa-gold transition-colors"><Eye size={14}/></button>
+                                <button onClick={() => { setEmailAppointment(appt); setShowEmailModal(true); }} className="px-2 py-1.5 rounded-lg text-[8px] font-bold uppercase tracking-widest bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white transition-all" title="Correo"><Mail size={11} className="inline mr-0.5" />Email</button>
+                                <button onClick={() => handleAddToCalendar(appt)} className="px-2 py-1.5 rounded-lg text-[8px] font-bold uppercase tracking-widest bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all" title="Calendario"><CalendarIcon size={11} className="inline mr-0.5" />Cal</button>
+                                <button onClick={() => { setViewingAppt(appt); setShowClientsPage(false); }} className="px-2 py-1.5 rounded-lg text-[8px] font-bold uppercase tracking-widest bg-spa-accent/10 text-spa-gold hover:bg-spa-accent hover:text-spa-base transition-all"><Eye size={11} className="inline mr-0.5" />Ver</button>
                               </div>
                             </div>
                           ))}
@@ -1167,10 +1163,10 @@ export default function App() {
                                   </div>
                                   <div className="flex items-center gap-1 shrink-0">
                                     <span className={`px-1.5 py-0.5 rounded-md text-[7px] font-bold uppercase tracking-wider border ${getStatusInfo(appt.status).className}`}>{getStatusInfo(appt.status).label}</span>
-                                    <button onClick={() => { setEmailAppointment(appt); setShowEmailModal(true); }} className="p-1.5 text-[#7A7D7B] hover:text-blue-400 rounded-lg transition-colors"><Mail size={14}/></button>
-                                    <button onClick={() => handleAddToCalendar(appt)} className="p-1.5 text-[#7A7D7B] hover:text-emerald-400 rounded-lg transition-colors"><CalendarIcon size={14}/></button>
+                                    <button onClick={() => { setEmailAppointment(appt); setShowEmailModal(true); }} className="p-1.5 bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white rounded-lg transition-all" title="Correo"><Mail size={13}/></button>
+                                    <button onClick={() => handleAddToCalendar(appt)} className="p-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white rounded-lg transition-all" title="Calendario"><CalendarIcon size={13}/></button>
                                     <span className="text-xs font-bold text-spa-gold mx-0.5">{price > 0 ? `${price.toFixed(2)}€` : "—"}</span>
-                                    <button onClick={() => handleAdminDelete(appt)} className="p-1.5 text-[#7A7D7B] hover:text-rose-500 rounded-lg transition-colors"><Trash2 size={14}/></button>
+                                    <button onClick={() => handleAdminDelete(appt)} className="p-1.5 bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white rounded-lg transition-all"><Trash2 size={13}/></button>
                                   </div>
                                 </div>
                               );

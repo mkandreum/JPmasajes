@@ -20,109 +20,7 @@ function escapeHtml(text: string): string {
     .replace(/'/g, '&#039;');
 }
 
-// Initialize persistent SQLite database
-const dataDir = path.join(process.cwd(), "data");
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
-const db = new Database(path.join(dataDir, "database.sqlite"));
-
-// Create tables if they don't exist
-db.exec(`
-  CREATE TABLE IF NOT EXISTS config (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    bannerUrl TEXT,
-    morningHours TEXT,
-    afternoonHours TEXT,
-    massageTypes TEXT,
-    address TEXT DEFAULT '',
-    logoUrl TEXT DEFAULT '',
-    logoPosition TEXT DEFAULT '{"x":50,"y":50}',
-    tagline TEXT DEFAULT 'La energía que fluye',
-    blockedDays TEXT DEFAULT '[]',
-    blockedShifts TEXT DEFAULT '[]'
-  );
-
-  CREATE TABLE IF NOT EXISTS appointments (
-    id TEXT PRIMARY KEY,
-    clientName TEXT,
-    clientEmail TEXT,
-    clientPhone TEXT,
-    startTime TEXT,
-    endTime TEXT,
-    status TEXT,
-    eventId TEXT,
-    massageType TEXT,
-    price TEXT,
-    duration TEXT,
-    addressSent INTEGER DEFAULT 0,
-    reminder6hSent INTEGER DEFAULT 0,
-    reminder2hSent INTEGER DEFAULT 0
-  );
-
-  CREATE TABLE IF NOT EXISTS admin_auth (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    tokens TEXT -- JSON string
-  );
-`);
-
-// Initialize default config if empty
-const configCount = db.prepare("SELECT COUNT(*) as count FROM config").get() as { count: number };
-if (configCount.count === 0) {
-  db.prepare("INSERT INTO config (id, bannerUrl, morningHours, afternoonHours, massageTypes, address) VALUES (?, ?, ?, ?, ?, ?)")
-    .run(1, "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80", 
-      JSON.stringify(["09:00", "10:00", "11:00", "12:00", "13:00"]), 
-      JSON.stringify(["15:00", "16:00", "17:00", "18:00", "19:00", "20:00"]),
-      JSON.stringify([
-        { id: "1", name: "Masaje Terapéutico", price: "50€", duration: "60 min", description: "" },
-        { id: "2", name: "Masaje Relajante", price: "45€", duration: "60 min", description: "" },
-        { id: "3", name: "Masaje Deportivo", price: "60€", duration: "60 min", description: "" }
-      ]),
-      ""
-    );
-} else {
-  // Migration: Add massageTypes column if it doesn't exist
-  try {
-    db.exec("ALTER TABLE config ADD COLUMN massageTypes TEXT");
-    db.prepare("UPDATE config SET massageTypes = ? WHERE id = 1")
-      .run(JSON.stringify([
-        { id: "1", name: "Masaje Terapéutico", price: "50€", duration: "60 min" },
-        { id: "2", name: "Masaje Relajante", price: "45€", duration: "60 min" },
-        { id: "3", name: "Masaje Deportivo", price: "60€", duration: "60 min" }
-      ]));
-  } catch (e) { /* column may already exist */ }
-}
-
-// Migration: Add price and duration columns to appointments if they don't exist
-try {
-  db.exec("ALTER TABLE appointments ADD COLUMN price TEXT");
-  db.exec("ALTER TABLE appointments ADD COLUMN duration TEXT");
-} catch (e) { /* columns may already exist */ }
-
-// Migration: Add address column to config if it doesn't exist
-try {
-  db.exec("ALTER TABLE config ADD COLUMN address TEXT");
-} catch (e) { /* column may already exist */ }
-
-// Migration: Add addressSent column to appointments if it doesn't exist
-try {
-  db.exec("ALTER TABLE appointments ADD COLUMN addressSent INTEGER DEFAULT 0");
-} catch (e) { /* column may already exist */ }
-
-// Migration: Add reminder columns to appointments if they don't exist
-try {
-  db.exec("ALTER TABLE appointments ADD COLUMN reminder6hSent INTEGER DEFAULT 0");
-  db.exec("ALTER TABLE appointments ADD COLUMN reminder2hSent INTEGER DEFAULT 0");
-} catch (e) { /* columns may already exist */ }
-
-// Migration: Add logo columns to config if they don't exist
-try {
-  db.exec("ALTER TABLE config ADD COLUMN logoUrl TEXT");
-  db.exec("ALTER TABLE config ADD COLUMN logoPosition TEXT DEFAULT '{\"x\":50,\"y\":50}'");
-} catch (e) { /* columns may already exist */ }
-
-// Migration: Add tagline column to config if it doesn't exist
-try {
-  db.exec("ALTER TABLE config ADD COLUMN tagline TEXT DEFAULT 'La energía que fluye'");
-} catch (e) { /* column may already exist */ }
+let db: Database.Database;
 
 interface Appointment {
   id: string;
@@ -160,7 +58,7 @@ oauth2Client.on('tokens', (newTokens) => {
 });
 
 // Setup Gemini
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
 
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || "";
 
@@ -222,6 +120,110 @@ let addressEmailInterval: ReturnType<typeof setInterval> | null = null;
 let remindersInterval: ReturnType<typeof setInterval> | null = null;
 
 async function startServer() {
+  // Initialize persistent SQLite database
+  const dataDir = path.join(process.cwd(), "data");
+  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
+  db = new Database(path.join(dataDir, "database.sqlite"));
+
+  // Create tables if they don't exist
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS config (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      bannerUrl TEXT,
+      morningHours TEXT,
+      afternoonHours TEXT,
+      massageTypes TEXT,
+      address TEXT DEFAULT '',
+      logoUrl TEXT DEFAULT '',
+      logoPosition TEXT DEFAULT '{"x":50,"y":50}',
+      tagline TEXT DEFAULT 'La energía que fluye',
+      blockedDays TEXT DEFAULT '[]',
+      blockedShifts TEXT DEFAULT '[]'
+    );
+
+    CREATE TABLE IF NOT EXISTS appointments (
+      id TEXT PRIMARY KEY,
+      clientName TEXT,
+      clientEmail TEXT,
+      clientPhone TEXT,
+      startTime TEXT,
+      endTime TEXT,
+      status TEXT,
+      eventId TEXT,
+      massageType TEXT,
+      price TEXT,
+      duration TEXT,
+      addressSent INTEGER DEFAULT 0,
+      reminder6hSent INTEGER DEFAULT 0,
+      reminder2hSent INTEGER DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS admin_auth (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      tokens TEXT -- JSON string
+    );
+  `);
+
+  // Initialize default config if empty
+  const configCount = db.prepare("SELECT COUNT(*) as count FROM config").get() as { count: number };
+  if (configCount.count === 0) {
+    db.prepare("INSERT INTO config (id, bannerUrl, morningHours, afternoonHours, massageTypes, address) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(1, "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80", 
+        JSON.stringify(["09:00", "10:00", "11:00", "12:00", "13:00"]), 
+        JSON.stringify(["15:00", "16:00", "17:00", "18:00", "19:00", "20:00"]),
+        JSON.stringify([
+          { id: "1", name: "Masaje Terapéutico", price: "50€", duration: "60 min", description: "" },
+          { id: "2", name: "Masaje Relajante", price: "45€", duration: "60 min", description: "" },
+          { id: "3", name: "Masaje Deportivo", price: "60€", duration: "60 min", description: "" }
+        ]),
+        ""
+      );
+  } else {
+    // Migration: Add massageTypes column if it doesn't exist
+    try {
+      db.exec("ALTER TABLE config ADD COLUMN massageTypes TEXT");
+      db.prepare("UPDATE config SET massageTypes = ? WHERE id = 1")
+        .run(JSON.stringify([
+          { id: "1", name: "Masaje Terapéutico", price: "50€", duration: "60 min" },
+          { id: "2", name: "Masaje Relajante", price: "45€", duration: "60 min" },
+          { id: "3", name: "Masaje Deportivo", price: "60€", duration: "60 min" }
+        ]));
+    } catch (e) { /* column may already exist */ }
+  }
+
+  // Migration: Add price and duration columns to appointments if they don't exist
+  try {
+    db.exec("ALTER TABLE appointments ADD COLUMN price TEXT");
+    db.exec("ALTER TABLE appointments ADD COLUMN duration TEXT");
+  } catch (e) { /* columns may already exist */ }
+
+  // Migration: Add address column to config if it doesn't exist
+  try {
+    db.exec("ALTER TABLE config ADD COLUMN address TEXT");
+  } catch (e) { /* column may already exist */ }
+
+  // Migration: Add addressSent column to appointments if it doesn't exist
+  try {
+    db.exec("ALTER TABLE appointments ADD COLUMN addressSent INTEGER DEFAULT 0");
+  } catch (e) { /* column may already exist */ }
+
+  // Migration: Add reminder columns to appointments if they don't exist
+  try {
+    db.exec("ALTER TABLE appointments ADD COLUMN reminder6hSent INTEGER DEFAULT 0");
+    db.exec("ALTER TABLE appointments ADD COLUMN reminder2hSent INTEGER DEFAULT 0");
+  } catch (e) { /* columns may already exist */ }
+
+  // Migration: Add logo columns to config if they don't exist
+  try {
+    db.exec("ALTER TABLE config ADD COLUMN logoUrl TEXT");
+    db.exec("ALTER TABLE config ADD COLUMN logoPosition TEXT DEFAULT '{\"x\":50,\"y\":50}'");
+  } catch (e) { /* columns may already exist */ }
+
+  // Migration: Add tagline column to config if it doesn't exist
+  try {
+    db.exec("ALTER TABLE config ADD COLUMN tagline TEXT DEFAULT 'La energía que fluye'");
+  } catch (e) { /* column may already exist */ }
+
   const app = express();
   app.use(express.json({ limit: "20mb" }));
 
@@ -897,6 +899,7 @@ async function startServer() {
      try {
        const { messages } = req.body;
        if (!messages || messages.length === 0) return res.status(400).json({ error: "Mensajes requeridos" });
+       if (!ai) return res.status(500).json({ error: "Asistente AI no configurado. Falta GEMINI_API_KEY." });
        const appointments = db.prepare("SELECT * FROM appointments").all() as any[];
        const config = getConfig();
 

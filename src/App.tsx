@@ -6,7 +6,7 @@ import { toast, Toaster } from "sonner";
 import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
 import { cn } from "../lib/utils";
 
-class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean}> {
+export class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean}> {
   constructor(props: {children: React.ReactNode}) {
     super(props);
     this.state = { hasError: false };
@@ -61,6 +61,8 @@ interface Appointment {
   endTime?: string;
   status?: string;
   massageType?: string;
+  duration?: string;
+  intensity?: string;
 }
 
 interface AppConfig {
@@ -198,12 +200,16 @@ export default function App() {
     try {
       const r = await fetch("/api/app-config");
       const d = await r.json();
-      setConfig(d);
-      const now = new Date();
-      const afternoonThreshold = d.afternoonHours?.length > 0
-        ? parseInt(d.afternoonHours[0].split(":")[0])
-        : 14;
-      if (now.getHours() >= afternoonThreshold) setActiveShift("afternoon");
+      if (d && !d.error && Array.isArray(d.morningHours)) {
+        setConfig(d);
+        const now = new Date();
+        const afternoonThreshold = d.afternoonHours?.length > 0
+          ? parseInt(d.afternoonHours[0].split(":")[0])
+          : 14;
+        if (now.getHours() >= afternoonThreshold) setActiveShift("afternoon");
+      } else if (d && d.error) {
+        toast.error(`Error de configuración: ${d.error}`);
+      }
     } catch {
       toast.error("Error al cargar configuración");
     } finally {
@@ -332,16 +338,17 @@ export default function App() {
     toast.success("Sesión cerrada");
   };
 
-  const getAvailableSlots = (shift: "morning" | "afternoon") => {
-    const hours = shift === "morning" ? config.morningHours : config.afternoonHours;
+  const getAvailableSlots = (shift: "morning" | "afternoon", customDate?: Date) => {
+    const targetDate = customDate || selectedDate;
+    const hours = (shift === "morning" ? config.morningHours : config.afternoonHours) || [];
     const now = new Date();
-    const dateStr = format(selectedDate, "yyyy-MM-dd");
-    if (config.blockedDays?.includes(dateStr)) return [];
-    if (config.blockedShifts?.some(b => b.date === dateStr && b.shift === shift)) return [];
+    const dateStr = format(targetDate, "yyyy-MM-dd");
+    if ((config.blockedDays || []).includes(dateStr)) return [];
+    if ((config.blockedShifts || []).some(b => b.date === dateStr && b.shift === shift)) return [];
     
     return hours.map(h => {
       const [hh, mm] = h.split(":").map(Number);
-      const slotTime = setMinutes(setHours(selectedDate, hh), mm);
+      const slotTime = setMinutes(setHours(targetDate, hh), mm);
       const existing = appointments.find(a => isSameDay(parseISO(a.startTime), slotTime) && parseISO(a.startTime).getHours() === hh && parseISO(a.startTime).getMinutes() === mm);
       const isPast = isBefore(slotTime, now);
       
@@ -419,7 +426,10 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ blockedDays: newBlockedDays })
       });
-      if (res.ok) setConfig(await res.json());
+      if (res.ok) {
+        const d = await res.json();
+        if (d && !d.error && Array.isArray(d.morningHours)) setConfig(d);
+      }
     } catch {
       toast.error("Error al bloquear día");
     }
@@ -436,7 +446,10 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ blockedShifts: newBlockedShifts })
       });
-      if (res.ok) setConfig(await res.json());
+      if (res.ok) {
+        const d = await res.json();
+        if (d && !d.error && Array.isArray(d.morningHours)) setConfig(d);
+      }
     } catch {
       toast.error("Error al bloquear turno");
     }
@@ -609,13 +622,13 @@ export default function App() {
               <p className="text-[8px] font-bold text-spa-gold uppercase tracking-[0.4em]">Massage Studio</p>
               {config.tagline && <p className="text-[9px] text-spa-gold/70 italic mt-1.5 tracking-wide">{config.tagline}</p>}
             </div>
-            {config.logoUrl && (
+            {config?.logoUrl && (
               <div className="w-14 h-14 md:w-16 md:h-16 rounded-full overflow-hidden border-2 border-spa-gold/30 shrink-0 bg-spa-elevated">
                 <img
                   src={config.logoUrl}
                   alt="Logo"
                   className="w-full h-full object-cover"
-                  style={{ objectPosition: `${config.logoPosition.x}% ${config.logoPosition.y}%` }}
+                  style={{ objectPosition: `${(config.logoPosition || { x: 50, y: 50 }).x}% ${(config.logoPosition || { x: 50, y: 50 }).y}%` }}
                 />
               </div>
             )}
@@ -628,7 +641,7 @@ export default function App() {
             {upcomingDays.map((day) => {
               const active = isSameDay(day, selectedDate);
               const past = isBefore(day, startOfToday());
-              const freeCount = [...getAvailableSlots("morning"), ...getAvailableSlots("afternoon")].filter(s => isSameDay(s.time, day) && s.isAvailable).length;
+              const freeCount = [...getAvailableSlots("morning", day), ...getAvailableSlots("afternoon", day)].filter(s => s.isAvailable).length;
               
               return (
                 <button
@@ -1070,12 +1083,12 @@ export default function App() {
                       <label className="text-[9px] font-bold text-spa-gold uppercase tracking-widest px-1">Logo del Estudio</label>
                       <div className="flex items-center gap-4">
                         <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-spa-gold/30 shrink-0 bg-spa-elevated flex items-center justify-center">
-                          {config.logoUrl ? (
+                          {config?.logoUrl ? (
                             <img
                               src={config.logoUrl}
                               alt="Logo"
                               className="w-full h-full object-cover"
-                              style={{ objectPosition: `${config.logoPosition.x}% ${config.logoPosition.y}%` }}
+                              style={{ objectPosition: `${(config.logoPosition || { x: 50, y: 50 }).x}% ${(config.logoPosition || { x: 50, y: 50 }).y}%` }}
                             />
                           ) : (
                             <span className="text-[9px] text-[#7A7D7B] uppercase tracking-widest">Logo</span>
@@ -1107,22 +1120,22 @@ export default function App() {
                           {config.logoUrl && (
                             <div className="flex items-center gap-1">
                               <button
-                                onClick={() => handleUpdateConfig({ ...config, logoPosition: { x: Math.max(0, config.logoPosition.x - 5), y: config.logoPosition.y } })}
+                                onClick={() => handleUpdateConfig({ ...config, logoPosition: { x: Math.max(0, (config.logoPosition || { x: 50, y: 50 }).x - 5), y: (config.logoPosition || { x: 50, y: 50 }).y } })}
                                 className="p-1.5 bg-spa-elevated rounded-lg hover:text-spa-gold transition-colors text-[#7A7D7B]"
                                 title="Mover izquierda"
                               >←</button>
                               <button
-                                onClick={() => handleUpdateConfig({ ...config, logoPosition: { x: config.logoPosition.x, y: Math.max(0, config.logoPosition.y - 5) } })}
+                                onClick={() => handleUpdateConfig({ ...config, logoPosition: { x: (config.logoPosition || { x: 50, y: 50 }).x, y: Math.max(0, (config.logoPosition || { x: 50, y: 50 }).y - 5) } })}
                                 className="p-1.5 bg-spa-elevated rounded-lg hover:text-spa-gold transition-colors text-[#7A7D7B]"
                                 title="Mover arriba"
                               >↑</button>
                               <button
-                                onClick={() => handleUpdateConfig({ ...config, logoPosition: { x: config.logoPosition.x, y: Math.min(100, config.logoPosition.y + 5) } })}
+                                onClick={() => handleUpdateConfig({ ...config, logoPosition: { x: (config.logoPosition || { x: 50, y: 50 }).x, y: Math.min(100, (config.logoPosition || { x: 50, y: 50 }).y + 5) } })}
                                 className="p-1.5 bg-spa-elevated rounded-lg hover:text-spa-gold transition-colors text-[#7A7D7B]"
                                 title="Mover abajo"
                               >↓</button>
                               <button
-                                onClick={() => handleUpdateConfig({ ...config, logoPosition: { x: Math.min(100, config.logoPosition.x + 5), y: config.logoPosition.y } })}
+                                onClick={() => handleUpdateConfig({ ...config, logoPosition: { x: Math.min(100, (config.logoPosition || { x: 50, y: 50 }).x + 5), y: (config.logoPosition || { x: 50, y: 50 }).y } })}
                                 className="p-1.5 bg-spa-elevated rounded-lg hover:text-spa-gold transition-colors text-[#7A7D7B]"
                                 title="Mover derecha"
                               >→</button>

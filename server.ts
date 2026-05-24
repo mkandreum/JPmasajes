@@ -1025,7 +1025,7 @@ db.prepare("INSERT INTO appointments (id, clientName, clientEmail, clientPhone, 
     }
   };
   addressEmailInterval = setInterval(checkAndSendAddressEmails, 60 * 1000);
-  checkAndSendAddressEmails();
+  checkAndSendAddressEmails().catch(e => console.error("Initial address check error:", e));
 
   // Scheduler: send reminder emails for pending appointments
   const checkAndSendReminders = async () => {
@@ -1124,7 +1124,7 @@ db.prepare("INSERT INTO appointments (id, clientName, clientEmail, clientPhone, 
     }
   };
   remindersInterval = setInterval(checkAndSendReminders, 60 * 1000);
-  checkAndSendReminders();
+  checkAndSendReminders().catch(e => console.error("Initial reminders check error:", e));
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
@@ -1146,7 +1146,15 @@ db.prepare("INSERT INTO appointments (id, clientName, clientEmail, clientPhone, 
   });
 }
 
-startServer();
+startServer().catch(e => {
+  console.error("Server startup error:", e);
+  process.exit(1);
+});
+
+// Global error handling - prevent crashes from unhandled rejections
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled Rejection:', reason);
+});
 
 // Graceful shutdown
 process.on('SIGTERM', () => {

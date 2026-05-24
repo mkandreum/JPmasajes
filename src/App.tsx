@@ -78,6 +78,7 @@ export default function App() {
   });
   const [infoModalMassage, setInfoModalMassage] = useState<{ name: string; description: string } | null>(null);
   const [editMassageId, setEditMassageId] = useState<string | null>(null);
+  const [showServiciosEditModal, setShowServiciosEditModal] = useState(false);
   
   // Parallax Effect
   const heroRef = useRef(null);
@@ -1231,7 +1232,7 @@ export default function App() {
                                           const mt = config.massageTypes.find(t => t.name === appt.massageType);
                                           if (mt?.intensity) {
                                             const info = getIntensityInfo(mt.intensity);
-                                            return <span className={`ml-1.5 px-1.5 py-0.5 rounded-md text-[6px] font-bold uppercase tracking-wider border ${info.className}`}>{info.label}</span>;
+                                            return <span className={`ml-1.5 px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider border ${info.className}`}>{info.label}</span>;
                                           }
                                           return null;
                                         })()}
@@ -1341,6 +1342,7 @@ export default function App() {
                                 onClick={() => {
                                   setEditMassageId(m.id);
                                   setNewMassage({ name: m.name, price: m.price, duration: m.duration, description: m.description || "", intensity: m.intensity || "" });
+                                  setShowServiciosEditModal(true);
                                 }}
                                 className="p-2 text-[#7A7D7B] hover:text-spa-gold transition-colors"
                                 title="Editar servicio"
@@ -1376,7 +1378,7 @@ export default function App() {
                     ))
                   )}
 
-                  {isAdminAuth && (
+                  {isAdminAuth && !editMassageId && (
                     <div className="pt-6 space-y-4">
                       <div className="grid grid-cols-1 gap-3">
                         <textarea
@@ -1438,6 +1440,36 @@ export default function App() {
                   )}
                 </div>
               </div>
+            </motion.div>
+          )}
+
+          {/* Edit Massage Modal (Servicios) */}
+          {showServiciosEditModal && editMassageId && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-[200] bg-spa-base/60 backdrop-blur-sm flex items-center justify-center p-4">
+              <motion.div initial={{ y: 30, opacity: 0, scale: 0.95 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 30, opacity: 0, scale: 0.95 }} transition={{ type: "spring", damping: 28, stiffness: 300 }} className="w-full max-w-md bg-spa-card rounded-[24px] border border-white/10 shadow-2xl overflow-hidden">
+                <div className="p-6 space-y-5">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-xl font-serif">Editar Masaje</h3>
+                    <button onClick={() => { setShowServiciosEditModal(false); setEditMassageId(null); setNewMassage({ name: "", price: "", duration: "", description: "", intensity: "" }); }} className="p-1.5 bg-spa-elevated rounded-full hover:text-spa-gold transition-colors"><X size={18}/></button>
+                  </div>
+                  <div className="space-y-3">
+                    <input value={newMassage.name} onChange={e => setNewMassage(p => ({...p, name: e.target.value}))} placeholder="Nombre" className="w-full h-12 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm" />
+                    <div className="grid grid-cols-2 gap-3">
+                      <input value={newMassage.price} onChange={e => setNewMassage(p => ({...p, price: e.target.value}))} placeholder="Precio" className="h-12 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm" />
+                      <input value={newMassage.duration} onChange={e => setNewMassage(p => ({...p, duration: e.target.value}))} placeholder="Duración" className="h-12 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm" />
+                    </div>
+                    <textarea value={newMassage.description} onChange={e => setNewMassage(p => ({...p, description: e.target.value}))} placeholder="Descripción" rows={3} className="w-full h-24 bg-spa-elevated border border-white/5 rounded-xl px-4 py-3 outline-none focus:border-spa-gold text-sm resize-none" />
+                    <select value={newMassage.intensity} onChange={e => setNewMassage(p => ({...p, intensity: e.target.value}))} className="w-full h-12 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm">
+                      <option value="">Sin intensidad</option>
+                      {intensityOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <button onClick={() => { handleAddMassageType(); setShowServiciosEditModal(false); }} className="flex-1 py-4 bg-spa-gold text-spa-base rounded-xl text-[10px] font-bold uppercase tracking-widest hover:opacity-90 transition-all">Guardar Cambios</button>
+                    <button onClick={() => { setShowServiciosEditModal(false); setEditMassageId(null); setNewMassage({ name: "", price: "", duration: "", description: "", intensity: "" }); }} className="px-6 py-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-[10px] font-bold uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all">Cancelar</button>
+                  </div>
+                </div>
+              </motion.div>
             </motion.div>
           )}
 

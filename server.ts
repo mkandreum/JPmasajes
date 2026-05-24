@@ -224,6 +224,14 @@ async function startServer() {
     db.exec("ALTER TABLE config ADD COLUMN tagline TEXT DEFAULT 'La energía que fluye'");
   } catch (e) { /* column may already exist */ }
 
+  // Migration: Add blockedDays and blockedShifts columns to config if they don't exist
+  try {
+    db.exec("ALTER TABLE config ADD COLUMN blockedDays TEXT DEFAULT '[]'");
+  } catch (e) { /* column may already exist */ }
+  try {
+    db.exec("ALTER TABLE config ADD COLUMN blockedShifts TEXT DEFAULT '[]'");
+  } catch (e) { /* column may already exist */ }
+
   const app = express();
   app.use(express.json({ limit: "20mb" }));
 

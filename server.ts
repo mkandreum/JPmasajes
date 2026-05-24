@@ -1,15 +1,15 @@
 import express from "express";
 import "dotenv/config";
-import crypto from "crypto";
+import { randomUUID } from "node:crypto";
 import { createServer as createViteServer } from "vite";
-import path from "path";
+import path from "node:path";
 import { google } from "googleapis";
 import { GoogleGenAI, Type } from "@google/genai";
 import { v4 as uuidv4 } from "uuid";
 import rateLimit from "express-rate-limit";
 
 import Database from "better-sqlite3";
-import fs from "fs";
+import fs from "node:fs";
 
 function escapeHtml(text: string): string {
   return text
@@ -454,7 +454,7 @@ async function startServer() {
         db.prepare("INSERT OR REPLACE INTO admin_auth (id, tokens) VALUES (1, ?)")
           .run(JSON.stringify({ ...tokens, adminEmail: userEmail }));
 
-        const sid = crypto.randomUUID();
+        const sid = randomUUID();
         sessions.set(sid, { email: userEmail });
         res.cookie('session', sid, { httpOnly: true, sameSite: 'lax', maxAge: 24 * 60 * 60 * 1000, path: '/' });
         res.redirect("/?admin=true");

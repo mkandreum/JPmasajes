@@ -1,5 +1,6 @@
 import express from "express";
 import "dotenv/config";
+import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { google } from "googleapis";
@@ -163,6 +164,18 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || "";
 
+// Session store (in-memory)
+const sessions = new Map<string, { email: string }>();
+const parseCookies = (cookieHeader?: string): Record<string, string> => {
+  const cookies: Record<string, string> = {};
+  if (!cookieHeader) return cookies;
+  cookieHeader.split(';').forEach(c => {
+    const eq = c.indexOf('=');
+    if (eq > 0) cookies[c.slice(0, eq).trim()] = c.slice(eq + 1).trim();
+  });
+  return cookies;
+};
+
 // Rate limiters
 const generalLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -182,11 +195,19 @@ const emailLimiter = rateLimit({
   message: { error: "Demasiados envíos de correo. Intenta de nuevo en un minuto." },
 });
 
-// Auth middleware: protects admin endpoints if ADMIN_API_KEY is set
+// Auth middleware: protects admin endpoints
 const requireAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  if (!ADMIN_API_KEY) return next();
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ') || authHeader.slice(7) !== ADMIN_API_KEY) {
+  // If ADMIN_API_KEY is set, use Bearer token auth
+  if (ADMIN_API_KEY) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ') || authHeader.slice(7) !== ADMIN_API_KEY) {
+      return res.status(401).json({ error: "No autorizado" });
+    }
+    return next();
+  }
+  // Otherwise, use session cookie auth
+  const sid = parseCookies(req.headers.cookie)["session"];
+  if (!sid || !sessions.has(sid)) {
     return res.status(401).json({ error: "No autorizado" });
   }
   next();
@@ -432,7 +453,10 @@ async function startServer() {
 
         db.prepare("INSERT OR REPLACE INTO admin_auth (id, tokens) VALUES (1, ?)")
           .run(JSON.stringify({ ...tokens, adminEmail: userEmail }));
-        
+
+        const sid = crypto.randomUUID();
+        sessions.set(sid, { email: userEmail });
+        res.cookie('session', sid, { httpOnly: true, sameSite: 'lax', maxAge: 24 * 60 * 60 * 1000, path: '/' });
         res.redirect("/?admin=true");
       } catch (e) {
         res.status(500).json({ error: "Error en la autenticación: " + String(e) });
@@ -440,6 +464,23 @@ async function startServer() {
     } else {
       res.redirect("/");
     }
+  });
+
+  // Get current session info
+  app.get("/api/auth/session", (req, res) => {
+    const sid = parseCookies(req.headers.cookie)["session"];
+    if (!sid || !sessions.has(sid)) {
+      return res.json({ authenticated: false });
+    }
+    res.json({ authenticated: true, email: sessions.get(sid)!.email });
+  });
+
+  // Logout: clear session
+  app.post("/api/auth/logout", (req, res) => {
+    const sid = parseCookies(req.headers.cookie)["session"];
+    if (sid) sessions.delete(sid);
+    res.clearCookie('session', { path: '/' });
+    res.json({ success: true });
   });
 
   // Appointments API

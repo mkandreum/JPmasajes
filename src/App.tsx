@@ -144,6 +144,20 @@ export default function App() {
     const now = new Date();
     if (now.getHours() >= 14) setActiveShift("afternoon");
     
+    // Check server-side session
+    fetch("/api/auth/session")
+      .then(r => r.json())
+      .then(session => {
+        if (cancelled) return;
+        if (session.authenticated) {
+          setIsAdminAuth(true);
+          localStorage.setItem("isAdmin", "true");
+        } else {
+          localStorage.removeItem("isAdmin");
+        }
+      })
+      .catch(() => {});
+
     fetch("/api/config")
       .then(r => r.json())
       .then(d => {
@@ -318,7 +332,8 @@ export default function App() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try { await fetch("/api/auth/logout", { method: "POST" }); } catch {}
     localStorage.removeItem("isAdmin");
     setIsAdminAuth(false);
     setShowAdminPanel(false);

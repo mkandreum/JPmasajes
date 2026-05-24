@@ -79,6 +79,11 @@ export default function App() {
   const [infoModalMassage, setInfoModalMassage] = useState<{ name: string; description: string } | null>(null);
   const [editMassageId, setEditMassageId] = useState<string | null>(null);
   const [showServiciosEditModal, setShowServiciosEditModal] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailAppointment, setEmailAppointment] = useState<Appointment | null>(null);
+  const [emailTemplate, setEmailTemplate] = useState("reminder");
+  const [emailCustomText, setEmailCustomText] = useState("");
+  const [showEmailCustomInput, setShowEmailCustomInput] = useState(false);
   
   // Parallax Effect
   const heroRef = useRef(null);
@@ -324,6 +329,30 @@ export default function App() {
       }
     } catch {
       toast.error("Error de conexión al reenviar correo");
+    }
+  };
+
+  const handleSendCustomEmail = async () => {
+    if (!emailAppointment) return;
+    try {
+      const res = await fetch(`/api/appointments/${emailAppointment.id}/send-custom-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ template: emailTemplate, customText: emailCustomText })
+      });
+      if (res.ok) {
+        toast.success("Correo enviado correctamente");
+        setShowEmailModal(false);
+        setEmailAppointment(null);
+        setEmailTemplate("reminder");
+        setEmailCustomText("");
+        setShowEmailCustomInput(false);
+      } else {
+        const err = await res.json();
+        toast.error(err.error || "Error al enviar correo");
+      }
+    } catch {
+      toast.error("Error de conexión");
     }
   };
 
@@ -701,7 +730,7 @@ export default function App() {
                       ) : (
                         <div className="flex gap-3 pt-2">
                           <button onClick={() => { setAdminRescheduleSlot(new Date()); setRescheduleApptId(viewingAppt!.id!); setViewingAppt(null); toast.info("Selecciona un horario disponible en el calendario"); }} className="flex-1 py-4 bg-spa-accent/10 border border-spa-accent/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-spa-gold hover:bg-spa-accent hover:text-spa-base transition-all">Reagendar</button>
-                          <button onClick={() => { handleResendEmail(viewingAppt); }} className="flex-1 py-4 bg-blue-500/10 border border-blue-500/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-blue-400 hover:bg-blue-500 hover:text-white transition-all"><Mail size={14} className="inline mr-1" />Correo</button>
+                          <button onClick={() => { setEmailAppointment(viewingAppt); setShowEmailModal(true); }} className="flex-1 py-4 bg-blue-500/10 border border-blue-500/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-blue-400 hover:bg-blue-500 hover:text-white transition-all"><Mail size={14} className="inline mr-1" />Correo</button>
                           <button onClick={() => { handleAddToCalendar(viewingAppt); }} className="flex-1 py-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all"><CalendarIcon size={14} className="inline mr-1" />Calendario</button>
                           <button onClick={() => handleAdminCancel(viewingAppt)} className="flex-1 py-4 bg-rose-500/10 border border-rose-500/30 rounded-xl text-[9px] font-bold uppercase tracking-widest text-rose-500 hover:bg-rose-500 hover:text-white transition-all">Cancelar</button>
                         </div>
@@ -828,124 +857,6 @@ export default function App() {
                           <span className="text-[10px] font-bold uppercase">Añadir</span>
                         </button>
                       </div>
-                    </div>
-                  </div>
-
-                  {/* Tipos de Masaje */}
-                  <div className="space-y-8">
-                    <h3 className="text-[11px] font-bold text-spa-gold uppercase tracking-[0.4em]">
-                      Tipos de Masaje
-                    </h3>
-
-                    <div className="grid grid-cols-1 gap-3">
-                      {config.massageTypes.map((m) => (
-                        <div
-                          key={m.id}
-                          className="bg-spa-elevated p-4 rounded-xl border border-white/5 flex justify-between items-center group"
-                        >
-                          <div>
-                            <p className="text-sm font-bold flex items-center gap-2">{m.name}
-                              {m.intensity && (
-                                <span className={`px-2 py-0.5 rounded-md text-[7px] font-bold uppercase tracking-wider border ${getIntensityInfo(m.intensity).className}`}>
-                                  {getIntensityInfo(m.intensity).label}
-                                </span>
-                              )}
-                            </p>
-                            <p className="text-[10px] text-[#7A7D7B]">
-                              {m.duration} • {m.price}
-                            </p>
-                            {m.description && (
-                              <p className="text-[10px] text-spa-crema/70 mt-1 line-clamp-2">{m.description}</p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => {
-                                setEditMassageId(m.id);
-                                setNewMassage({ name: m.name, price: m.price, duration: m.duration, description: m.description || "", intensity: m.intensity || "" });
-                              }}
-                              className="p-2 text-[#7A7D7B] hover:text-spa-gold transition-colors"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
-                            </button>
-                            <button
-                              onClick={() =>
-                                handleUpdateConfig({
-                                  ...config,
-                                  massageTypes: config.massageTypes.filter((x) => x.id !== m.id),
-                                })
-                              }
-                              className="p-2 text-[#7A7D7B] hover:text-rose-500 transition-colors"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <input
-                        value={newMassage.name}
-                        onChange={(e) =>
-                          setNewMassage((prev) => ({ ...prev, name: e.target.value }))
-                        }
-                        placeholder="Nombre"
-                        className="h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm md:col-span-3"
-                      />
-                      <input
-                        value={newMassage.price}
-                        onChange={(e) =>
-                          setNewMassage((prev) => ({ ...prev, price: e.target.value }))
-                        }
-                        placeholder="Precio"
-                        className="h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm"
-                      />
-                      <input
-                        value={newMassage.duration}
-                        onChange={(e) =>
-                          setNewMassage((prev) => ({ ...prev, duration: e.target.value }))
-                        }
-                        placeholder="Duración"
-                        className="h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm"
-                      />
-                      <textarea
-                        value={newMassage.description}
-                        onChange={(e) =>
-                          setNewMassage((prev) => ({ ...prev, description: e.target.value }))
-                        }
-                        placeholder="Descripción"
-                        rows={3}
-                        className="h-24 bg-spa-elevated border border-white/5 rounded-xl px-4 py-3 outline-none focus:border-spa-gold text-sm resize-none md:col-span-3"
-                      />
-                      <select
-                        value={newMassage.intensity}
-                        onChange={(e) => setNewMassage((prev) => ({ ...prev, intensity: e.target.value }))}
-                        className="h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm md:col-span-3"
-                      >
-                        <option value="">Sin intensidad</option>
-                        {intensityOptions.map(o => (
-                          <option key={o.value} value={o.value}>{o.label}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleAddMassageType}
-                        className="flex-1 py-4 border-2 border-dashed border-spa-accent/30 rounded-xl text-spa-gold text-[10px] font-bold uppercase tracking-widest hover:bg-spa-accent/10 transition-all flex items-center justify-center gap-2"
-                      >
-                        {editMassageId ? <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg> : <Plus size={16} />}
-                        {editMassageId ? "Guardar Cambios" : "Añadir Tipo de Masaje"}
-                      </button>
-                      {editMassageId && (
-                        <button
-                          onClick={() => { setEditMassageId(null); setNewMassage({ name: "", price: "", duration: "", description: "" }); }}
-                          className="px-6 py-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-[10px] font-bold uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all"
-                        >
-                          Cancelar
-                        </button>
-                      )}
                     </div>
                   </div>
 
@@ -1116,9 +1027,9 @@ export default function App() {
 
                               <div className="flex items-center gap-1">
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); handleResendEmail(appt); }}
+                                  onClick={(e) => { e.stopPropagation(); setEmailAppointment(appt); setShowEmailModal(true); }}
                                   className="px-2 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white transition-all"
-                                  title="Reenviar correo"
+                                  title="Enviar correo"
                                 >
                                   <Mail size={12} className="inline mr-1" />Email
                                 </button>
@@ -1242,9 +1153,9 @@ export default function App() {
                                     </div>
                                     <div className="flex items-center gap-1">
                                       <button
-                                        onClick={() => handleResendEmail(appt)}
+                                        onClick={() => { setEmailAppointment(appt); setShowEmailModal(true); }}
                                         className="p-1.5 text-[#7A7D7B] hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
-                                        title="Reenviar correo"
+                                        title="Enviar correo"
                                       >
                                         <Mail size={14} />
                                       </button>
@@ -1440,6 +1351,41 @@ export default function App() {
                   )}
                 </div>
               </div>
+            </motion.div>
+          )}
+
+          {/* Email Modal */}
+          {showEmailModal && emailAppointment && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-[200] bg-spa-base/60 backdrop-blur-sm flex items-center justify-center p-4">
+              <motion.div initial={{ y: 30, opacity: 0, scale: 0.95 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 30, opacity: 0, scale: 0.95 }} transition={{ type: "spring", damping: 28, stiffness: 300 }} className="w-full max-w-md bg-spa-card rounded-[24px] border border-white/10 shadow-2xl overflow-hidden p-6">
+                <div className="flex justify-between items-center mb-5">
+                  <h3 className="text-xl font-serif">Enviar Correo</h3>
+                  <button onClick={() => { setShowEmailModal(false); setEmailAppointment(null); setEmailTemplate("reminder"); setEmailCustomText(""); setShowEmailCustomInput(false); }} className="p-1.5 bg-spa-elevated rounded-full hover:text-spa-gold transition-colors"><X size={18}/></button>
+                </div>
+                <div className="bg-gradient-to-r from-spa-accent/20 to-transparent p-4 rounded-xl border border-spa-gold/20 mb-5">
+                  <p className="text-sm font-serif">{emailAppointment.clientName}</p>
+                  <p className="text-[10px] text-spa-gold mt-1">{emailAppointment.clientEmail}</p>
+                  <p className="text-[9px] text-[#7A7D7B] mt-0.5">{emailAppointment.massageType} • {format(parseISO(emailAppointment.startTime), "d MMM, HH:mm", { locale: es })}</p>
+                </div>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <select value={emailTemplate} onChange={e => setEmailTemplate(e.target.value)} className="flex-1 h-11 bg-spa-elevated border border-white/5 rounded-xl px-4 outline-none focus:border-spa-gold text-sm">
+                      <option value="reminder">Recordatorio de Cita</option>
+                      <option value="address">Dirección del Estudio</option>
+                      <option value="custom">Personalizado</option>
+                    </select>
+                    <button onClick={() => setShowEmailCustomInput(!showEmailCustomInput)} className="w-11 h-11 bg-spa-elevated border border-white/5 rounded-xl flex items-center justify-center text-spa-gold hover:border-spa-gold transition-all shrink-0">
+                      {showEmailCustomInput ? <X size={18}/> : <Plus size={18}/>}
+                    </button>
+                  </div>
+                  {showEmailCustomInput && (
+                    <textarea value={emailCustomText} onChange={e => setEmailCustomText(e.target.value)} placeholder="Escribe un mensaje adicional para el cliente..." rows={4} className="w-full bg-spa-elevated border border-white/5 rounded-xl px-4 py-3 outline-none focus:border-spa-gold text-sm resize-none" />
+                  )}
+                  <button onClick={handleSendCustomEmail} className="w-full h-12 bg-spa-gold text-spa-base font-bold uppercase tracking-[0.2em] rounded-xl hover:opacity-90 active:scale-95 transition-all text-xs shadow-xl">
+                    Enviar Correo
+                  </button>
+                </div>
+              </motion.div>
             </motion.div>
           )}
 

@@ -561,6 +561,56 @@ async function startServer() {
     }
   });
 
+  // Send custom email (template + optional custom text)
+  app.post("/api/appointments/:id/send-custom-email", async (req, res) => {
+    const { id } = req.params;
+    const { template, customText } = req.body;
+    const appt = db.prepare("SELECT * FROM appointments WHERE id = ?").get(id) as any;
+    if (!appt) return res.status(404).json({ error: "Cita no encontrada" });
+
+    const tokens = getAdminTokens();
+    if (!tokens) return res.status(401).json({ error: "Google no conectado" });
+
+    const dateStr = new Date(appt.startTime).toLocaleString('es-ES', {
+      weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid'
+    });
+
+    const cfg = getConfig();
+    let subject = "";
+    let content = "";
+
+    switch (template) {
+      case "reminder":
+        subject = "Recordatorio de tu Cita - Jean Pierre";
+        content = "<p>Te recordamos que tienes una cita próxima en nuestro estudio. Estaremos encantados de recibirte para brindarte la mejor experiencia de relajación y bienestar.</p><p>Por favor, confirma que podrás asistir o, si necesitas realizar algún cambio, utiliza el enlace de gestión que encontrarás más abajo.</p>";
+        break;
+      case "address":
+        subject = "Dirección del Estudio - Jean Pierre";
+        content = `<p>Tu cita está a punto de comenzar. Aquí tienes la dirección de nuestro estudio para que puedas llegar sin problemas:</p><div style="background:rgba(143,114,86,0.1);padding:15px 20px;border-radius:10px;border:1px solid rgba(143,114,86,0.2);margin:15px 0;"><p style="margin:0;font-size:16px;color:#F9F8F6;">${cfg.address}</p></div><p>Te esperamos para brindarte una experiencia única.</p>`;
+        break;
+      default:
+        subject = "Mensaje de tu Terapeuta - Jean Pierre";
+        content = customText
+          ? `<p>${customText.replace(/\n/g, '</p><p>')}</p>`
+          : "<p>Mensaje de parte de tu terapeuta.</p>";
+        break;
+    }
+
+    if (template !== "custom" && customText) {
+      content += `<div style="background:rgba(201,169,110,0.08);padding:15px 20px;border-radius:10px;border:1px solid rgba(201,169,110,0.15);margin-top:15px;"><p style="margin:0;font-size:14px;color:#C9A96E;font-style:italic;">${customText.replace(/\n/g, '<br>')}</p></div>`;
+    }
+
+    const html = getHtmlTemplate(subject.split(' - ')[0], content, appt.clientName, dateStr, id, appt.massageType);
+
+    try {
+      await sendEmail(appt.clientEmail, subject, html);
+      res.json({ success: true });
+    } catch (e) {
+      console.error("Custom email error:", e);
+      res.status(500).json({ error: "Error al enviar el correo" });
+    }
+  });
+
   // Add appointment to admin's Google Calendar
   app.post("/api/appointments/:id/add-to-calendar", async (req, res) => {
     const { id } = req.params;

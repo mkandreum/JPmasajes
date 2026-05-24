@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Menu, User, Clock, ChevronLeft, ChevronRight, X, Calendar as CalendarIcon, Phone, Mail, Leaf, MessageCircle, Send, LogOut, Sun, Moon, Plus, Trash2, Eye, Check, Sparkles } from "lucide-react";
-import { format, addDays, startOfToday, parseISO, isSameDay, setHours, setMinutes, isBefore, isAfter } from "date-fns";
+import { format, addDays, startOfToday, startOfMonth, endOfMonth, parseISO, isSameDay, setHours, setMinutes, isBefore, isAfter } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast, Toaster } from "sonner";
 import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";

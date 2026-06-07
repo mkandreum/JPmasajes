@@ -76,6 +76,7 @@ interface AppConfig {
   tagline?: string;
   blockedDays: string[];
   blockedShifts: { date: string; shift: "morning" | "afternoon" }[];
+  blockedHours: { date: string; hours: string[] }[];
   phone?: string;
 }
 
@@ -93,7 +94,8 @@ export default function App() {
     logoPosition: { x: 50, y: 50 },
     tagline: "",
     blockedDays: [],
-    blockedShifts: []
+    blockedShifts: [],
+    blockedHours: []
   });
   
   const [selectedDate, setSelectedDate] = useState<Date>(startOfToday());
@@ -354,10 +356,11 @@ export default function App() {
       const slotTime = setMinutes(setHours(targetDate, hh), mm);
       const existing = appointments.find(a => isSameDay(parseISO(a.startTime), slotTime) && parseISO(a.startTime).getHours() === hh && parseISO(a.startTime).getMinutes() === mm);
       const isPast = isBefore(slotTime, now);
+      const hourBlocked = isHourBlocked(targetDate, h);
       
       return {
         time: slotTime,
-        isAvailable: !existing && !isPast,
+        isAvailable: !existing && !isPast && !hourBlocked,
         isPast,
         appointment: existing
       };
@@ -489,9 +492,45 @@ export default function App() {
     }
   };
 
+  const toggleHourBlock = async (date: Date, hour: string) => {
+    const dateStr = format(date, "yyyy-MM-dd");
+    const current = config.blockedHours || [];
+    const existing = current.find(b => b.date === dateStr);
+    let newBlockedHours: { date: string; hours: string[] }[];
+    if (existing) {
+      if (existing.hours.includes(hour)) {
+        const updatedHours = existing.hours.filter(h => h !== hour);
+        if (updatedHours.length === 0) {
+          newBlockedHours = current.filter(b => b.date !== dateStr);
+        } else {
+          newBlockedHours = current.map(b => b.date === dateStr ? { ...b, hours: updatedHours } : b);
+        }
+      } else {
+        newBlockedHours = current.map(b => b.date === dateStr ? { ...b, hours: [...b.hours, hour].sort() } : b);
+      }
+    } else {
+      newBlockedHours = [...current, { date: dateStr, hours: [hour] }];
+    }
+    try {
+      const res = await fetch("/api/app-config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ blockedHours: newBlockedHours })
+      });
+      if (res.ok) {
+        const d = await res.json();
+        if (d && !d.error && Array.isArray(d.morningHours)) setConfig(d);
+      }
+    } catch {
+      toast.error("Error al bloquear hora");
+    }
+  };
+
   const isDayBlocked = (date: Date) => (config.blockedDays || []).includes(format(date, "yyyy-MM-dd"));
   const isShiftBlocked = (date: Date, shift: "morning" | "afternoon") =>
     (config.blockedShifts || []).some(b => b.date === format(date, "yyyy-MM-dd") && b.shift === shift);
+  const isHourBlocked = (date: Date, hour: string) =>
+    (config.blockedHours || []).some(b => b.date === format(date, "yyyy-MM-dd") && b.hours.includes(hour));
 
   const handleResendEmail = async (appt: Appointment) => {
     try {
@@ -1264,7 +1303,7 @@ export default function App() {
                                 <div className="text-[7px] text-[#7A7D7B] font-mono text-right pr-1.5 leading-8">{hour}</div>
                                 {Array.from({length: 7}, (_, i) => {
                                   const day = addDays(calendarMonth, i);
-                                  const slotBlocked = isDayBlocked(day) || (isMorn ? isShiftBlocked(day, "morning") : isShiftBlocked(day, "afternoon"));
+                                  const slotBlocked = isDayBlocked(day) || (isMorn ? isShiftBlocked(day, "morning") : isShiftBlocked(day, "afternoon")) || isHourBlocked(day, hour);
                                   const appt = appointments.find(a =>
                                     isSameDay(parseISO(a.startTime), day) &&
                                     parseISO(a.startTime).getHours() === hh &&
@@ -1298,7 +1337,7 @@ export default function App() {
                         <div className="text-center text-[8px] text-spa-gold font-bold uppercase tracking-widest">
                           {format(selectedCalendarDay, "EEEE d 'de' MMMM", { locale: es })} — {appointments.filter(a => isSameDay(parseISO(a.startTime), selectedCalendarDay)).length} cita(s)
                         </div>
-                        <div className="flex justify-center gap-2 mt-1.5">
+                        <div className="flex justify-center gap-2 mt-1.5 flex-wrap">
                           <button onClick={() => toggleDayBlock(selectedCalendarDay)} className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[7px] font-bold uppercase tracking-wider transition-all", isDayBlocked(selectedCalendarDay) ? "bg-rose-500/15 border-rose-500/40 text-rose-400" : "bg-spa-elevated border-white/5 text-[#7A7D7B] hover:text-spa-crema")}>
                             {isDayBlocked(selectedCalendarDay) ? <Lock size={10} /> : <Unlock size={10} />} Día
                           </button>
@@ -1308,6 +1347,32 @@ export default function App() {
                           <button onClick={() => toggleShiftBlock(selectedCalendarDay, "afternoon")} className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[7px] font-bold uppercase tracking-wider transition-all", isShiftBlocked(selectedCalendarDay, "afternoon") ? "bg-rose-500/15 border-rose-500/40 text-rose-400" : "bg-spa-elevated border-white/5 text-[#7A7D7B] hover:text-spa-crema")}>
                             {isShiftBlocked(selectedCalendarDay, "afternoon") ? <Lock size={10} /> : <Unlock size={10} />} Tarde
                           </button>
+                        </div>
+                        {/* Hour-level blocking */}
+                        <div className="mt-3 border-t border-white/5 pt-3">
+                          <p className="text-[7px] text-[#7A7D7B] font-bold uppercase tracking-widest text-center mb-2">Horas específicas</p>
+                          <div className="flex flex-wrap justify-center gap-1.5">
+                            {[...config.morningHours, ...config.afternoonHours].map(hour => {
+                              const blocked = isHourBlocked(selectedCalendarDay, hour);
+                              const isMorn = config.morningHours.includes(hour);
+                              return (
+                                <button
+                                  key={hour}
+                                  onClick={() => toggleHourBlock(selectedCalendarDay, hour)}
+                                  className={cn(
+                                    "px-2 py-1 rounded-md border text-[7px] font-bold uppercase tracking-wider transition-all",
+                                    blocked
+                                      ? "bg-rose-500/15 border-rose-500/40 text-rose-400"
+                                      : "bg-spa-elevated border-white/5 text-[#7A7D7B] hover:text-spa-crema hover:border-spa-gold/30",
+                                    isMorn ? "" : "opacity-80"
+                                  )}
+                                >
+                                  {blocked ? <Lock size={8} className="inline mr-0.5" /> : <Unlock size={8} className="inline mr-0.5" />}
+                                  {hour}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
                       </>
                     )}

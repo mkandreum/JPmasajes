@@ -265,6 +265,11 @@ async function startServer() {
     db.exec("ALTER TABLE config ADD COLUMN phone TEXT DEFAULT '34623101111'");
   } catch (e) { /* column may already exist */ }
 
+  // Migration: Add blockedHours column to config if it doesn't exist
+  try {
+    db.exec("ALTER TABLE config ADD COLUMN blockedHours TEXT DEFAULT '[]'");
+  } catch (e) { /* column may already exist */ }
+
   const app = express();
   app.use(express.json({ limit: "20mb" }));
 
@@ -287,6 +292,8 @@ async function startServer() {
     try { blockedDays = row.blockedDays ? JSON.parse(row.blockedDays) : []; } catch (e) { blockedDays = []; }
     let blockedShifts: string[] = [];
     try { blockedShifts = row.blockedShifts ? JSON.parse(row.blockedShifts) : []; } catch (e) { blockedShifts = []; }
+    let blockedHours: { date: string; hours: string[] }[] = [];
+    try { blockedHours = row.blockedHours ? JSON.parse(row.blockedHours) : []; } catch (e) { blockedHours = []; }
     return {
       bannerUrl: row.bannerUrl,
       morningHours,
@@ -298,6 +305,7 @@ async function startServer() {
       tagline: row.tagline || "La energía que fluye",
       blockedDays,
       blockedShifts,
+      blockedHours,
       phone: row.phone || "34623101111"
     };
   };
@@ -434,10 +442,10 @@ async function startServer() {
   });
 
   app.put("/api/app-config", requireAdmin, (req, res) => {
-    const { bannerUrl, morningHours, afternoonHours, massageTypes, address, logoUrl, logoPosition, tagline, blockedDays, blockedShifts, phone } = req.body;
+    const { bannerUrl, morningHours, afternoonHours, massageTypes, address, logoUrl, logoPosition, tagline, blockedDays, blockedShifts, blockedHours, phone } = req.body;
     const current = getConfig();
     
-    db.prepare("UPDATE config SET bannerUrl = ?, morningHours = ?, afternoonHours = ?, massageTypes = ?, address = ?, logoUrl = ?, logoPosition = ?, tagline = ?, blockedDays = ?, blockedShifts = ?, phone = ? WHERE id = 1")
+    db.prepare("UPDATE config SET bannerUrl = ?, morningHours = ?, afternoonHours = ?, massageTypes = ?, address = ?, logoUrl = ?, logoPosition = ?, tagline = ?, blockedDays = ?, blockedShifts = ?, blockedHours = ?, phone = ? WHERE id = 1")
       .run(
         bannerUrl || current.bannerUrl,
         morningHours ? JSON.stringify(morningHours) : JSON.stringify(current.morningHours),
@@ -449,6 +457,7 @@ async function startServer() {
         tagline !== undefined ? tagline : (current.tagline || "La energía que fluye"),
         blockedDays ? JSON.stringify(blockedDays) : JSON.stringify(current.blockedDays || []),
         blockedShifts ? JSON.stringify(blockedShifts) : JSON.stringify(current.blockedShifts || []),
+        blockedHours ? JSON.stringify(blockedHours) : JSON.stringify(current.blockedHours || []),
         phone !== undefined ? phone : (current.phone || "34623101111")
       );
     
